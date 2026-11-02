@@ -14,9 +14,9 @@ def test_analyze_command_displays_analysis() -> None:
     )
 
     assert result.exit_code == 0
-    assert "Password Analysis" in result.output
-    assert "Estimated Crack Times" in result.output
-    assert "Warning" in result.output
+    assert "PASSWORD SECURITY REPORT" in result.output
+    assert "CRACK TIME ESTIMATES" in result.output
+    assert "SECURITY FEEDBACK" in result.output
     assert "password123" not in result.output
 
 

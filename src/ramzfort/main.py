@@ -1,5 +1,7 @@
+
 import typer
 
+from ramzfort.cli.commands.analyze import analyze
 from ramzfort.cli.commands.generate import generate
 
 app = typer.Typer(
@@ -15,6 +17,7 @@ def main_callback() -> None:
 
 
 app.command()(generate)
+app.command()(analyze)
 
 
 def main() -> None:

@@ -11,6 +11,8 @@ requires-python = ">=3.15"
 dependencies = [
     "typer>=0.27.3",
     "rich>=15.0.0",
+    "zxcvbn==4.5.0",
+    "types-zxcvbn>=4.5.0.20260518",
 ]
 
 [project.scripts]

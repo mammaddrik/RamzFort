@@ -13,7 +13,7 @@ def generate_password(
     """Generate a cryptographically secure random password.
 
     Args:
-        length: Password length between 8 and 128 characters.
+        length: Password length between 8 and 72 characters.
         use_lowercase: Include lowercase ASCII letters.
         use_uppercase: Include uppercase ASCII letters.
         use_digits: Include decimal digits.
@@ -30,8 +30,8 @@ def generate_password(
     if isinstance(length, bool) or not isinstance(length, int):
         raise TypeError("Password length must be an integer.")
 
-    if not 8 <= length <= 128:
-        raise ValueError("Password length must be between 8 and 128.")
+    if not 8 <= length <= 72:
+        raise ValueError("Password length must be between 8 and 72.")
 
     if not all(
         isinstance(option, bool)

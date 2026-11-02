@@ -17,7 +17,7 @@ def test_generate_password_default_options() -> None:
     assert any(not char.isalnum() for char in password)
 
 
-@pytest.mark.parametrize("length", [7, 129, 0, -1])
+@pytest.mark.parametrize("length", [7, 73, 129, 0, -1])
 def test_generate_password_invalid_length(length: int) -> None:
     with pytest.raises(ValueError):
         generate_password(length=length)
@@ -33,7 +33,7 @@ def test_generate_password_without_character_sets() -> None:
         )
 
 
-@pytest.mark.parametrize("length", [8, 128])
+@pytest.mark.parametrize("length", [8, 72])
 def test_generate_password_boundary_lengths(length: int) -> None:
     password = generate_password(length=length)
 

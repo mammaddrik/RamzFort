@@ -1,6 +1,8 @@
+
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.text import Text
 
 from ramzfort.security.password_generator import generate_password
 
@@ -11,8 +13,8 @@ def generate(
     length: int = typer.Option(
         16,
         min=8,
-        max=128,
-        help="Password length (8-128 characters).",
+        max=72,
+        help="Password length (8-72 characters).",
     ),
     lowercase: bool = typer.Option(True, help="Include lowercase letters."),
     uppercase: bool = typer.Option(True, help="Include uppercase letters."),
@@ -38,7 +40,7 @@ def generate(
     if show:
         console.print(
             Panel(
-                password,
+                Text(password),
                 title="Generated Password",
                 border_style="green",
                 expand=False,

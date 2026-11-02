@@ -61,3 +61,17 @@ def test_analyze_password_returns_crack_time_estimates() -> None:
     assert estimates.online_no_throttling.display
     assert estimates.offline_slow_hashing.display
     assert estimates.offline_fast_hashing.display
+
+
+def test_analyze_password_accepts_maximum_length() -> None:
+    result = analyze_password("A" * 72)
+
+    assert result.zxcvbn_score == 0
+
+
+def test_analyze_password_rejects_excessive_length() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Password must not exceed 72 characters.",
+    ):
+        analyze_password("A" * 73)

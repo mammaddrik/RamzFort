@@ -24,6 +24,9 @@ def analyze_password(password: str) -> PasswordAnalysis:
     if not password:
         raise ValueError("Password cannot be empty.")
 
+    if len(password) > 72:
+        raise ValueError("Password must not exceed 72 characters.")
+
     if not password.isascii():
         raise ValueError("Password must contain ASCII characters only.")
 

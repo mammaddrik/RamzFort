@@ -1,4 +1,6 @@
+from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from ramzfort.main import app
@@ -38,8 +40,9 @@ def test_generate_command_with_selected_options() -> None:
     assert "Password generated successfully." in result.output
 
 
-def test_generate_command_rejects_invalid_length() -> None:
-    result = runner.invoke(app, ["generate", "--length", "7"])
+@pytest.mark.parametrize("length", ["7", "73", "129"])
+def test_generate_command_rejects_invalid_length(length: str) -> None:
+    result = runner.invoke(app, ["generate", "--length", length])
 
     assert result.exit_code != 0
 
@@ -76,3 +79,15 @@ def test_generate_command_shows_password_when_requested() -> None:
     assert result.exit_code == 0
     assert "Generated Password" in result.output
     assert "Password generated successfully." not in result.output
+
+def test_generate_command_displays_password_without_markup_parsing() -> None:
+    password = "[red]secret[/red]"
+
+    with patch(
+        "ramzfort.cli.commands.generate.generate_password",
+        return_value=password,
+    ):
+        result = runner.invoke(app, ["generate", "--show"])
+
+    assert result.exit_code == 0
+    assert password in result.output

@@ -1,0 +1,46 @@
+
+import contextlib
+import os
+import tempfile
+from pathlib import Path
+
+
+def write_atomically(path: str | Path, data: bytes) -> None:
+    if not isinstance(data, bytes):
+        raise TypeError("Data must be bytes.")
+
+    target = Path(path)
+
+    if not target.name:
+        raise ValueError("Target path must reference a file.")
+
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{target.name}.",
+        suffix=".tmp",
+        dir=target.parent,
+    )
+
+    temporary_path = Path(temporary_name)
+
+    try:
+        temporary_file = os.fdopen(file_descriptor, "wb")
+        file_descriptor = -1
+
+        with temporary_file:
+            written = temporary_file.write(data)
+
+            if written != len(data):
+                raise OSError("Incomplete file write.")
+
+            temporary_file.flush()
+            os.fsync(temporary_file.fileno())
+
+        os.replace(temporary_path, target)
+
+    finally:
+        if file_descriptor != -1:
+            with contextlib.suppress(OSError):
+                os.close(file_descriptor)
+
+        with contextlib.suppress(OSError):
+            temporary_path.unlink()

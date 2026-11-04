@@ -39,10 +39,11 @@ class VaultManager:
         file_digest: bytes,
     ) -> None:
         self._path = Path(path)
-        self._key = key
+        self._key = bytearray(key)
         self._entries = list(entries)
         self._salt = salt
         self._file_digest = file_digest
+        self._closed = False
 
     @classmethod
     def create(
@@ -160,10 +161,37 @@ class VaultManager:
             file_digest=hashlib.sha256(vault_data).digest(),
         )
 
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise RuntimeError("Vault is closed.")
+
+    def close(self) -> None:
+        if self._closed:
+            return
+
+        self._key[:] = b"\x00" * len(self._key)
+        self._entries.clear()
+        self._closed = True
+
+    def __enter__(self) -> VaultManager:
+        self._ensure_open()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: object,
+        exc_value: object,
+        traceback: object,
+    ) -> None:
+        self.close()
+
     def get_entries(self) -> tuple[VaultEntry, ...]:
+        self._ensure_open()
         return tuple(self._entries)
 
     def _write_entries(self, entries: list[VaultEntry]) -> None:
+        self._ensure_open()
+
         nonce = generate_nonce()
 
         plaintext = serialize_entries(entries)
@@ -184,7 +212,7 @@ class VaultManager:
 
         ciphertext = encrypt_data(
             plaintext=plaintext,
-            key=self._key,
+            key=bytes(self._key),
             nonce=nonce,
             associated_data=header_data,
         )
@@ -217,9 +245,12 @@ class VaultManager:
             self._file_digest = hashlib.sha256(vault_data).digest()
 
     def save(self) -> None:
+        self._ensure_open()
         self._write_entries(self._entries)
 
     def add_entry(self, entry: VaultEntry) -> None:
+        self._ensure_open()
+
         if not isinstance(entry, VaultEntry):
             raise TypeError("Entry must be a VaultEntry object.")
 
@@ -233,6 +264,8 @@ class VaultManager:
         self._entries = updated_entries
 
     def remove_entry(self, entry_id: UUID) -> None:
+        self._ensure_open()
+
         if not isinstance(entry_id, UUID):
             raise TypeError("Entry ID must be a UUID.")
 
@@ -250,6 +283,8 @@ class VaultManager:
         self._entries = updated_entries
 
     def update_entry(self, entry: VaultEntry) -> None:
+        self._ensure_open()
+
         if not isinstance(entry, VaultEntry):
             raise TypeError("Entry must be a VaultEntry object.")
 

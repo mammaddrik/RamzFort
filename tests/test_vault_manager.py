@@ -1,3 +1,4 @@
+
 from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -711,3 +712,104 @@ def test_save_rejects_external_file_modification(tmp_path: Path) -> None:
         manager.save()
 
     assert vault_path.read_bytes() == original_data + b"external modification"
+
+
+def test_close_clears_encryption_key(tmp_path: Path) -> None:
+    manager = VaultManager.create(
+        tmp_path / "test.vault",
+        "StrongMasterPassword123!",
+    )
+
+    key = manager._key
+
+    manager.close()
+
+    assert key == b"\x00" * 32
+
+
+def test_close_clears_internal_entries(tmp_path: Path) -> None:
+    manager = VaultManager.create(
+        tmp_path / "test.vault",
+        "StrongMasterPassword123!",
+    )
+
+    entry = VaultEntry(
+        title="GitHub",
+        username="test-user",
+        password="GitHubPassword123!",
+    )
+    manager.add_entry(entry)
+
+    manager.close()
+
+    assert manager._entries == []
+
+
+def test_close_is_idempotent(tmp_path: Path) -> None:
+    manager = VaultManager.create(
+        tmp_path / "test.vault",
+        "StrongMasterPassword123!",
+    )
+
+    manager.close()
+    manager.close()
+
+    assert manager._closed is True
+
+
+def test_closed_vault_rejects_operations(tmp_path: Path) -> None:
+    manager = VaultManager.create(
+        tmp_path / "test.vault",
+        "StrongMasterPassword123!",
+    )
+
+    manager.close()
+
+    entry = VaultEntry(
+        title="GitHub",
+        username="test-user",
+        password="GitHubPassword123!",
+    )
+
+    with pytest.raises(RuntimeError, match="Vault is closed"):
+        manager.get_entries()
+
+    with pytest.raises(RuntimeError, match="Vault is closed"):
+        manager.save()
+
+    with pytest.raises(RuntimeError, match="Vault is closed"):
+        manager.add_entry(entry)
+
+    with pytest.raises(RuntimeError, match="Vault is closed"):
+        manager.remove_entry(uuid4())
+
+    with pytest.raises(RuntimeError, match="Vault is closed"):
+        manager.update_entry(entry)
+
+
+def test_context_manager_closes_vault(tmp_path: Path) -> None:
+    manager = VaultManager.create(
+        tmp_path / "test.vault",
+        "StrongMasterPassword123!",
+    )
+
+    with manager as opened_manager:
+        assert opened_manager is manager
+        assert manager._closed is False
+
+    assert manager._closed is True
+
+
+def test_context_manager_closes_vault_after_exception(
+    tmp_path: Path,
+) -> None:
+    manager = VaultManager.create(
+        tmp_path / "test.vault",
+        "StrongMasterPassword123!",
+    )
+
+    with pytest.raises(RuntimeError, match="test exception"), manager:
+        raise RuntimeError("test exception")
+
+    assert manager._closed is True
+

@@ -1,3 +1,4 @@
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -7,13 +8,18 @@ from cryptography.exceptions import InvalidTag
 from ramzfort.security.encryption import decrypt_data, encrypt_data
 from ramzfort.security.key_derivation import derive_key
 from ramzfort.security.randomness import generate_nonce, generate_salt
-from ramzfort.vault.atomic_writer import write_atomically
+from ramzfort.vault.atomic_writer import (
+    create_atomically,
+    write_atomically,
+)
+from ramzfort.vault.exceptions import ConcurrentModificationError
 from ramzfort.vault.file_format import (
     AUTH_TAG_SIZE,
     CIPHER_AES_256_GCM,
     KDF_ARGON2ID,
 )
-from ramzfort.vault.file_reader import read_vault_file
+from ramzfort.vault.file_lock import VaultFileLock
+from ramzfort.vault.file_reader import read_vault_data
 from ramzfort.vault.header import VaultHeader
 from ramzfort.vault.models import VaultEntry
 from ramzfort.vault.serialization import deserialize_entries, serialize_entries
@@ -30,11 +36,13 @@ class VaultManager:
         key: bytes,
         entries: list[VaultEntry],
         salt: bytes,
+        file_digest: bytes,
     ) -> None:
         self._path = Path(path)
         self._key = key
         self._entries = list(entries)
         self._salt = salt
+        self._file_digest = file_digest
 
     @classmethod
     def create(
@@ -49,9 +57,6 @@ class VaultManager:
             raise ValueError("Master password must not be empty.")
 
         vault_path = Path(path)
-
-        if vault_path.exists():
-            raise FileExistsError("Vault file already exists.")
 
         salt = generate_salt()
         nonce = generate_nonce()
@@ -91,9 +96,11 @@ class VaultManager:
         if len(ciphertext) != ciphertext_length:
             raise RuntimeError("Unexpected ciphertext length.")
 
-        write_atomically(
+        vault_data = header_data + ciphertext
+
+        create_atomically(
             path=vault_path,
-            data=header_data + ciphertext,
+            data=vault_data,
         )
 
         return cls(
@@ -101,6 +108,7 @@ class VaultManager:
             key=key,
             entries=entries,
             salt=salt,
+            file_digest=hashlib.sha256(vault_data).digest(),
         )
 
     @classmethod
@@ -116,7 +124,8 @@ class VaultManager:
             raise ValueError("Master password must not be empty.")
 
         vault_path = Path(path)
-        header, ciphertext = read_vault_file(vault_path)
+        vault_data = vault_path.read_bytes()
+        header, ciphertext = read_vault_data(vault_data)
 
         key = derive_key(
             password=master_password,
@@ -148,6 +157,7 @@ class VaultManager:
             key=key,
             entries=entries,
             salt=header.salt,
+            file_digest=hashlib.sha256(vault_data).digest(),
         )
 
     def get_entries(self) -> tuple[VaultEntry, ...]:
@@ -182,10 +192,29 @@ class VaultManager:
         if len(ciphertext) != ciphertext_length:
             raise RuntimeError("Unexpected ciphertext length.")
 
-        write_atomically(
-            path=self._path,
-            data=header_data + ciphertext,
-        )
+        vault_data = header_data + ciphertext
+
+        with VaultFileLock(self._path):
+            try:
+                current_data = self._path.read_bytes()
+            except FileNotFoundError as error:
+                raise ConcurrentModificationError(
+                    "Vault file no longer exists."
+                ) from error
+
+            current_digest = hashlib.sha256(current_data).digest()
+
+            if current_digest != self._file_digest:
+                raise ConcurrentModificationError(
+                    "Vault file was modified by another process."
+                )
+
+            write_atomically(
+                path=self._path,
+                data=vault_data,
+            )
+
+            self._file_digest = hashlib.sha256(vault_data).digest()
 
     def save(self) -> None:
         self._write_entries(self._entries)
@@ -246,7 +275,10 @@ class VaultManager:
             url=entry.url,
             notes=entry.notes,
             created_at=original_entry.created_at,
-            updated_at=max(datetime.now(UTC), original_entry.created_at),
+            updated_at=max(
+                datetime.now(UTC),
+                original_entry.updated_at,
+            ),
         )
 
         updated_entries = self._entries.copy()

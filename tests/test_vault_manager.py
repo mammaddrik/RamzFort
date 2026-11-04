@@ -7,6 +7,7 @@ import pytest
 
 from ramzfort.security.encryption import decrypt_data
 from ramzfort.security.key_derivation import derive_key
+from ramzfort.vault.exceptions import ConcurrentModificationError
 from ramzfort.vault.file_reader import read_vault_file
 from ramzfort.vault.manager import VaultManager
 from ramzfort.vault.models import VaultEntry
@@ -229,7 +230,7 @@ def test_save_preserves_vault_data(tmp_path: Path) -> None:
     assert reopened_manager.get_entries() == ()
 
 
-def test_save_generates_new_nonce(tmp_path: Path) -> None:
+def test_save_generates_unique_nonces(tmp_path: Path) -> None:
     vault_path = tmp_path / "ramzfort.vault"
 
     manager = VaultManager.create(
@@ -237,13 +238,16 @@ def test_save_generates_new_nonce(tmp_path: Path) -> None:
         "StrongMasterPassword123!",
     )
 
-    original_header, _ = read_vault_file(vault_path)
+    nonces = {
+        read_vault_file(vault_path)[0].nonce,
+    }
 
-    manager.save()
+    for _ in range(20):
+        manager.save()
+        header, _ = read_vault_file(vault_path)
+        nonces.add(header.nonce)
 
-    updated_header, _ = read_vault_file(vault_path)
-
-    assert updated_header.nonce != original_header.nonce
+    assert len(nonces) == 21
 
 
 def test_save_preserves_salt(tmp_path: Path) -> None:
@@ -662,3 +666,48 @@ def test_update_entry_preserves_memory_when_save_fails(
         manager.update_entry(updated_entry)
 
     assert manager.get_entries() == (original_entry,)
+
+
+def test_save_rejects_concurrent_modification(tmp_path: Path) -> None:
+    vault_path = tmp_path / "test.vault"
+
+    first_manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    second_manager = VaultManager.open(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    first_manager.save()
+
+    with pytest.raises(ConcurrentModificationError):
+        second_manager.save()
+
+    assert second_manager.get_entries() == ()
+
+    reopened_manager = VaultManager.open(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    assert reopened_manager.get_entries() == ()
+
+
+def test_save_rejects_external_file_modification(tmp_path: Path) -> None:
+    vault_path = tmp_path / "test.vault"
+
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    original_data = vault_path.read_bytes()
+    vault_path.write_bytes(original_data + b"external modification")
+
+    with pytest.raises(ConcurrentModificationError):
+        manager.save()
+
+    assert vault_path.read_bytes() == original_data + b"external modification"

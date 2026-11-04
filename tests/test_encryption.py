@@ -123,3 +123,13 @@ def test_decrypt_rejects_invalid_associated_data() -> None:
 
     with pytest.raises(TypeError):
         decrypt_data(ciphertext, KEY, NONCE, cast(bytes, "invalid"))
+
+
+def test_decrypt_rejects_modified_authentication_tag() -> None:
+    ciphertext = bytearray(
+        encrypt_data(PLAINTEXT, KEY, NONCE, AAD)
+    )
+    ciphertext[-1] ^= 1
+
+    with pytest.raises(InvalidTag):
+        decrypt_data(bytes(ciphertext), KEY, NONCE, AAD)

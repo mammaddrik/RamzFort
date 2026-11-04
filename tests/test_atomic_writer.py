@@ -1,11 +1,13 @@
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import cast
+from threading import Barrier
+from typing import Any, cast
 
 import pytest
 
-from ramzfort.vault.atomic_writer import write_atomically
+from ramzfort.vault.atomic_writer import create_atomically, write_atomically
 
 
 def test_write_atomically_creates_file(tmp_path: Path) -> None:
@@ -78,3 +80,77 @@ def test_write_atomically_rejects_non_bytes(tmp_path: Path) -> None:
 
     with pytest.raises(TypeError):
         write_atomically(target, cast(bytes, "plain-text"))
+
+
+def test_create_atomically_creates_file(tmp_path: Path) -> None:
+    target = tmp_path / "ramzfort.vault"
+
+    create_atomically(target, b"encrypted data")
+
+    assert target.read_bytes() == b"encrypted data"
+
+
+def test_create_atomically_rejects_existing_file(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "ramzfort.vault"
+    target.write_bytes(b"original data")
+
+    with pytest.raises(FileExistsError):
+        create_atomically(target, b"new data")
+
+    assert target.read_bytes() == b"original data"
+
+
+def test_create_atomically_removes_temporary_file_after_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    target = tmp_path / "ramzfort.vault"
+
+    def fail_link(source: str | bytes, destination: str | bytes) -> None:
+        raise OSError("Simulated link failure.")
+
+    monkeypatch.setattr(os, "link", fail_link)
+
+    with pytest.raises(OSError, match="Simulated link failure"):
+        create_atomically(target, b"encrypted data")
+
+    assert not target.exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_create_atomically_rejects_non_bytes(tmp_path: Path) -> None:
+    target = tmp_path / "ramzfort.vault"
+
+    with pytest.raises(TypeError, match="Data must be bytes"):
+        create_atomically(target, cast(Any, "invalid"))
+
+
+def test_create_atomically_allows_only_one_concurrent_writer(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "ramzfort.vault"
+    barrier = Barrier(2)
+
+    def create_file(data: bytes) -> str:
+        barrier.wait()
+
+        try:
+            create_atomically(target, data)
+        except FileExistsError:
+            return "exists"
+
+        return "created"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(
+            executor.map(
+                create_file,
+                (b"first", b"second"),
+            )
+        )
+
+    assert sorted(results) == ["created", "exists"]
+    assert target.read_bytes() in (b"first", b"second")
+    assert list(tmp_path.iterdir()) == [target]

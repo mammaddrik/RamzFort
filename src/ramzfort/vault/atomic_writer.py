@@ -5,15 +5,10 @@ import tempfile
 from pathlib import Path
 
 
-def write_atomically(path: str | Path, data: bytes) -> None:
-    if not isinstance(data, bytes):
-        raise TypeError("Data must be bytes.")
-
-    target = Path(path)
-
-    if not target.name:
-        raise ValueError("Target path must reference a file.")
-
+def _write_temporary_file(
+    target: Path,
+    data: bytes,
+) -> tuple[int, Path]:
     file_descriptor, temporary_name = tempfile.mkstemp(
         prefix=f".{target.name}.",
         suffix=".tmp",
@@ -35,12 +30,52 @@ def write_atomically(path: str | Path, data: bytes) -> None:
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
 
-        os.replace(temporary_path, target)
+        return 0, temporary_path
 
-    finally:
+    except BaseException:
         if file_descriptor != -1:
             with contextlib.suppress(OSError):
                 os.close(file_descriptor)
 
+        with contextlib.suppress(OSError):
+            temporary_path.unlink()
+
+        raise
+
+
+def write_atomically(path: str | Path, data: bytes) -> None:
+    if not isinstance(data, bytes):
+        raise TypeError("Data must be bytes.")
+
+    target = Path(path)
+
+    if not target.name:
+        raise ValueError("Target path must reference a file.")
+
+    _, temporary_path = _write_temporary_file(target, data)
+
+    try:
+        os.replace(temporary_path, target)
+
+    finally:
+        with contextlib.suppress(OSError):
+            temporary_path.unlink()
+
+
+def create_atomically(path: str | Path, data: bytes) -> None:
+    if not isinstance(data, bytes):
+        raise TypeError("Data must be bytes.")
+
+    target = Path(path)
+
+    if not target.name:
+        raise ValueError("Target path must reference a file.")
+
+    _, temporary_path = _write_temporary_file(target, data)
+
+    try:
+        os.link(temporary_path, target)
+
+    finally:
         with contextlib.suppress(OSError):
             temporary_path.unlink()

@@ -1,4 +1,6 @@
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 from cryptography.exceptions import InvalidTag
 
@@ -196,6 +198,59 @@ class VaultManager:
             raise ValueError("Entry ID already exists.")
 
         updated_entries = [*self._entries, entry]
+
+        self._write_entries(updated_entries)
+
+        self._entries = updated_entries
+
+    def remove_entry(self, entry_id: UUID) -> None:
+        if not isinstance(entry_id, UUID):
+            raise TypeError("Entry ID must be a UUID.")
+
+        updated_entries = [
+            entry
+            for entry in self._entries
+            if entry.id != entry_id
+        ]
+
+        if len(updated_entries) == len(self._entries):
+            raise KeyError("Vault entry not found.")
+
+        self._write_entries(updated_entries)
+
+        self._entries = updated_entries
+
+    def update_entry(self, entry: VaultEntry) -> None:
+        if not isinstance(entry, VaultEntry):
+            raise TypeError("Entry must be a VaultEntry object.")
+
+        entry_index = next(
+            (
+                index
+                for index, existing in enumerate(self._entries)
+                if existing.id == entry.id
+            ),
+            None,
+        )
+
+        if entry_index is None:
+            raise KeyError("Vault entry not found.")
+
+        original_entry = self._entries[entry_index]
+
+        updated_entry = VaultEntry(
+            id=original_entry.id,
+            title=entry.title,
+            username=entry.username,
+            password=entry.password,
+            url=entry.url,
+            notes=entry.notes,
+            created_at=original_entry.created_at,
+            updated_at=max(datetime.now(UTC), original_entry.created_at),
+        )
+
+        updated_entries = self._entries.copy()
+        updated_entries[entry_index] = updated_entry
 
         self._write_entries(updated_entries)
 

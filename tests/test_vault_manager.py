@@ -1,5 +1,7 @@
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, cast
+from uuid import uuid4
 
 import pytest
 
@@ -384,3 +386,279 @@ def test_add_entry_preserves_memory_when_save_fails(
         manager.add_entry(entry)
 
     assert manager.get_entries() == ()
+
+
+def test_remove_entry_removes_existing_entry(tmp_path: Path) -> None:
+    vault_path = tmp_path / "ramzfort.vault"
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    entry = VaultEntry(
+        title="GitHub",
+        username="test-user",
+        password="GitHubPassword123!",
+    )
+
+    manager.add_entry(entry)
+    manager.remove_entry(entry.id)
+
+    assert manager.get_entries() == ()
+
+
+def test_remove_entry_persists_after_reopening(
+    tmp_path: Path,
+) -> None:
+    vault_path = tmp_path / "ramzfort.vault"
+    master_password = "StrongMasterPassword123!"
+
+    manager = VaultManager.create(vault_path, master_password)
+
+    entry = VaultEntry(
+        title="GitHub",
+        username="test-user",
+        password="GitHubPassword123!",
+    )
+
+    manager.add_entry(entry)
+    manager.remove_entry(entry.id)
+
+    reopened_manager = VaultManager.open(vault_path, master_password)
+
+    assert reopened_manager.get_entries() == ()
+
+
+def test_remove_entry_rejects_unknown_id(
+    tmp_path: Path,
+) -> None:
+    vault_path = tmp_path / "ramzfort.vault"
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    with pytest.raises(KeyError, match="Vault entry not found"):
+        manager.remove_entry(uuid4())
+
+    assert manager.get_entries() == ()
+
+
+def test_remove_entry_rejects_invalid_id_type(
+    tmp_path: Path,
+) -> None:
+    vault_path = tmp_path / "ramzfort.vault"
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    with pytest.raises(TypeError, match="UUID"):
+        manager.remove_entry(cast(Any, "invalid-id"))
+
+    assert manager.get_entries() == ()
+
+
+def test_remove_entry_preserves_memory_when_save_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vault_path = tmp_path / "ramzfort.vault"
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    entry = VaultEntry(
+        title="GitHub",
+        username="test-user",
+        password="GitHubPassword123!",
+    )
+
+    manager.add_entry(entry)
+
+    def fail_write(*args: Any, **kwargs: Any) -> None:
+        raise OSError("Simulated write failure.")
+
+    monkeypatch.setattr(
+        "ramzfort.vault.manager.write_atomically",
+        fail_write,
+    )
+
+    with pytest.raises(OSError, match="Simulated write failure"):
+        manager.remove_entry(entry.id)
+
+    assert manager.get_entries() == (entry,)
+
+
+def test_update_entry_updates_existing_entry(tmp_path: Path) -> None:
+    vault_path = tmp_path / "ramzfort.vault"
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    original_entry = VaultEntry(
+        title="GitHub",
+        username="old-user",
+        password="OldPassword123!",
+    )
+
+    manager.add_entry(original_entry)
+
+    updated_entry = VaultEntry(
+        id=original_entry.id,
+        title="GitHub",
+        username="new-user",
+        password="NewPassword123!",
+    )
+
+    manager.update_entry(updated_entry)
+
+    result = manager.get_entries()[0]
+
+    assert result.id == original_entry.id
+    assert result.username == "new-user"
+    assert result.password == "NewPassword123!"
+    assert result.created_at == original_entry.created_at
+    assert result.updated_at >= original_entry.created_at
+
+
+def test_update_entry_persists_after_reopening(
+    tmp_path: Path,
+) -> None:
+    vault_path = tmp_path / "ramzfort.vault"
+    master_password = "StrongMasterPassword123!"
+
+    manager = VaultManager.create(vault_path, master_password)
+
+    original_entry = VaultEntry(
+        title="GitHub",
+        username="old-user",
+        password="OldPassword123!",
+    )
+
+    manager.add_entry(original_entry)
+
+    updated_entry = VaultEntry(
+        id=original_entry.id,
+        title="GitHub",
+        username="new-user",
+        password="NewPassword123!",
+    )
+
+    manager.update_entry(updated_entry)
+
+    reopened_manager = VaultManager.open(vault_path, master_password)
+
+    assert reopened_manager.get_entries() == manager.get_entries()
+
+
+def test_update_entry_preserves_creation_timestamp(
+    tmp_path: Path,
+) -> None:
+    vault_path = tmp_path / "ramzfort.vault"
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    original_entry = VaultEntry(
+        title="GitHub",
+        username="old-user",
+        password="OldPassword123!",
+    )
+
+    manager.add_entry(original_entry)
+
+    future_created_at = original_entry.created_at + timedelta(days=1)
+
+    updated_entry = VaultEntry(
+        id=original_entry.id,
+        title="Updated GitHub",
+        username="new-user",
+        password="NewPassword123!",
+        created_at=future_created_at,
+        updated_at=future_created_at,
+    )
+
+    manager.update_entry(updated_entry)
+
+    result = manager.get_entries()[0]
+
+    assert result.created_at == original_entry.created_at
+
+
+def test_update_entry_rejects_unknown_id(
+    tmp_path: Path,
+) -> None:
+    vault_path = tmp_path / "ramzfort.vault"
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    entry = VaultEntry(
+        title="GitHub",
+        username="test-user",
+        password="Password123!",
+    )
+
+    with pytest.raises(KeyError, match="Vault entry not found"):
+        manager.update_entry(entry)
+
+    assert manager.get_entries() == ()
+
+
+def test_update_entry_rejects_invalid_type(
+    tmp_path: Path,
+) -> None:
+    vault_path = tmp_path / "ramzfort.vault"
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    with pytest.raises(TypeError, match="VaultEntry"):
+        manager.update_entry(cast(Any, "invalid entry"))
+
+    assert manager.get_entries() == ()
+
+
+def test_update_entry_preserves_memory_when_save_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    vault_path = tmp_path / "ramzfort.vault"
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+
+    original_entry = VaultEntry(
+        title="GitHub",
+        username="old-user",
+        password="OldPassword123!",
+    )
+
+    manager.add_entry(original_entry)
+
+    updated_entry = VaultEntry(
+        id=original_entry.id,
+        title="GitHub",
+        username="new-user",
+        password="NewPassword123!",
+    )
+
+    def fail_write(*args: Any, **kwargs: Any) -> None:
+        raise OSError("Simulated write failure.")
+
+    monkeypatch.setattr(
+        "ramzfort.vault.manager.write_atomically",
+        fail_write,
+    )
+
+    with pytest.raises(OSError, match="Simulated write failure"):
+        manager.update_entry(updated_entry)
+
+    assert manager.get_entries() == (original_entry,)

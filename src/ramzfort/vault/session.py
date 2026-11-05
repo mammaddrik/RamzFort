@@ -1,3 +1,4 @@
+
 import time
 from collections.abc import Callable
 from uuid import UUID
@@ -112,9 +113,22 @@ class VaultSession:
         self._manager._close_from_session()
         self._state = SessionState.CLOSED
 
+    def __enter__(self) -> VaultSession:
+        self._check_activity()
+        return self
+
+    def __exit__(
+        self,
+        exc_type: object,
+        exc_value: object,
+        traceback: object,
+    ) -> None:
+        self.close()
+
     def _ensure_active(self) -> None:
         if self._state is SessionState.CLOSED:
             raise RuntimeError("Session is closed.")
 
         if self._state is SessionState.LOCKED:
             raise RuntimeError("Session is locked.")
+

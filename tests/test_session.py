@@ -374,3 +374,34 @@ def test_locked_session_rejects_vault_operations(
 
     with pytest.raises(RuntimeError, match="Session is locked"):
         session.save()
+
+
+def test_context_manager_closes_session(session: VaultSession) -> None:
+    with session as active_session:
+        assert active_session is session
+        assert session.state is SessionState.ACTIVE
+
+    assert session.state.name == "CLOSED"
+
+
+def test_context_manager_closes_session_after_exception(
+    session: VaultSession,
+) -> None:
+    with pytest.raises(ValueError, match="Test exception"), session:
+        raise ValueError("Test exception")
+
+    assert session.state is SessionState.CLOSED
+
+
+def test_locked_session_blocks_internal_write(
+    manager: VaultManager,
+) -> None:
+    session = VaultSession(manager)
+    session.lock()
+
+    with pytest.raises(RuntimeError, match="Session is locked"):
+        manager._write_entries([])
+
+    assert session.state is SessionState.LOCKED
+
+    session.close()

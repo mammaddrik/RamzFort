@@ -13,6 +13,8 @@ from ramzfort.vault.file_reader import read_vault_file
 from ramzfort.vault.manager import VaultManager
 from ramzfort.vault.models import VaultEntry
 from ramzfort.vault.serialization import deserialize_entries
+from ramzfort.vault.session import VaultSession
+from ramzfort.vault.session_state import SessionState
 
 
 def test_create_generates_vault_file(tmp_path: Path) -> None:
@@ -813,3 +815,22 @@ def test_context_manager_closes_vault_after_exception(
 
     assert manager._closed is True
 
+
+def test_context_manager_rejects_manager_with_active_session(
+    tmp_path: Path,
+) -> None:
+    manager = VaultManager.create(
+        tmp_path / "test.vault",
+        "test-master-password",
+    )
+    session = VaultSession(manager)
+
+    with pytest.raises(
+        RuntimeError,
+        match="Vault lifecycle is managed by an active session",
+    ), manager:
+        pass
+
+    assert session.state is SessionState.ACTIVE
+
+    session.close()

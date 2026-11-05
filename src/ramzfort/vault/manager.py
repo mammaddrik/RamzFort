@@ -310,6 +310,7 @@ class VaultManager:
         self._access_guard = None
 
     def __enter__(self) -> VaultManager:
+        self._ensure_session_unbound()
         self._ensure_unlocked()
         return self
 
@@ -327,6 +328,7 @@ class VaultManager:
         return tuple(self._entries)
 
     def _write_entries(self, entries: list[VaultEntry]) -> None:
+        self._check_access()
         self._ensure_unlocked()
 
         nonce = generate_nonce()

@@ -1,3 +1,4 @@
+
 import hashlib
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -13,7 +14,11 @@ from ramzfort.vault.atomic_writer import (
     create_atomically,
     write_atomically,
 )
-from ramzfort.vault.exceptions import ConcurrentModificationError
+from ramzfort.vault.exceptions import (
+    ConcurrentModificationError,
+    InvalidMasterPasswordError,
+    VaultCorruptedError,
+)
 from ramzfort.vault.file_format import (
     AUTH_TAG_SIZE,
     CIPHER_AES_256_GCM,
@@ -137,7 +142,13 @@ class VaultManager:
 
         vault_path = Path(path)
         vault_data = vault_path.read_bytes()
-        header, ciphertext = read_vault_data(vault_data)
+
+        try:
+            header, ciphertext = read_vault_data(vault_data)
+        except (TypeError, ValueError) as error:
+            raise VaultCorruptedError(
+                "Vault file is corrupted."
+            ) from error
 
         key = derive_key(
             password=master_password,
@@ -155,14 +166,16 @@ class VaultManager:
                 associated_data=header.to_bytes(),
             )
         except InvalidTag as error:
-            raise ValueError(
-                "Invalid master password or corrupted vault."
+            raise InvalidMasterPasswordError(
+                "Invalid master password."
             ) from error
 
         try:
             entries = deserialize_entries(plaintext)
         except (TypeError, ValueError) as error:
-            raise ValueError("Vault contains invalid data.") from error
+            raise VaultCorruptedError(
+                "Vault contains invalid data."
+            ) from error
 
         return cls(
             path=vault_path,
@@ -257,7 +270,12 @@ class VaultManager:
                     "Vault file was modified while locked."
                 )
 
-        header, ciphertext = read_vault_data(vault_data)
+        try:
+            header, ciphertext = read_vault_data(vault_data)
+        except (TypeError, ValueError) as error:
+            raise VaultCorruptedError(
+                "Vault file is corrupted."
+            ) from error
 
         key = derive_key(
             password=master_password,
@@ -275,14 +293,16 @@ class VaultManager:
                 associated_data=header.to_bytes(),
             )
         except InvalidTag as error:
-            raise ValueError(
-                "Invalid master password or corrupted vault."
+            raise InvalidMasterPasswordError(
+                "Invalid master password."
             ) from error
 
         try:
             entries = deserialize_entries(plaintext)
         except (TypeError, ValueError) as error:
-            raise ValueError("Vault contains invalid data.") from error
+            raise VaultCorruptedError(
+                "Vault contains invalid data."
+            ) from error
 
         self._key = bytearray(key)
         self._entries = entries
@@ -329,6 +349,10 @@ class VaultManager:
 
     def _write_entries(self, entries: list[VaultEntry]) -> None:
         self._check_access()
+        self._ensure_unlocked()
+        self._write_entries_unchecked(entries)
+
+    def _write_entries_unchecked(self, entries: list[VaultEntry]) -> None:
         self._ensure_unlocked()
 
         nonce = generate_nonce()
@@ -386,7 +410,7 @@ class VaultManager:
     def save(self) -> None:
         self._check_access()
         self._ensure_unlocked()
-        self._write_entries(self._entries)
+        self._write_entries_unchecked(self._entries)
 
     def add_entry(self, entry: VaultEntry) -> None:
         self._check_access()
@@ -400,7 +424,7 @@ class VaultManager:
 
         updated_entries = [*self._entries, entry]
 
-        self._write_entries(updated_entries)
+        self._write_entries_unchecked(updated_entries)
 
         self._entries = updated_entries
 
@@ -420,7 +444,7 @@ class VaultManager:
         if len(updated_entries) == len(self._entries):
             raise KeyError("Vault entry not found.")
 
-        self._write_entries(updated_entries)
+        self._write_entries_unchecked(updated_entries)
 
         self._entries = updated_entries
 
@@ -462,6 +486,6 @@ class VaultManager:
         updated_entries = self._entries.copy()
         updated_entries[entry_index] = updated_entry
 
-        self._write_entries(updated_entries)
+        self._write_entries_unchecked(updated_entries)
 
         self._entries = updated_entries

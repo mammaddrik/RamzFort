@@ -24,7 +24,9 @@ class VaultAuthenticator:
         if idle_timeout <= 0:
             raise ValueError("Idle timeout must be greater than zero.")
 
-        self._guard = guard or AuthenticationGuard()
+        self._guard = (
+            guard if guard is not None else AuthenticationGuard()
+        )
         self._idle_timeout = float(idle_timeout)
 
     @property

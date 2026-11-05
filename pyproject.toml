@@ -15,6 +15,7 @@ dependencies = [
     "cryptography>=50.0.2",
     "argon2-cffi>=25.1.0",
     "portalocker>=4.4.2",
+    "pyperclip>=1.9.0",
 ]
 
 [project.scripts]
@@ -26,6 +27,7 @@ dev = [
     "ruff>=0.17",
     "mypy>=2.4",
     "types-zxcvbn>=4.5.0.20260518",
+    "types-pyperclip",
 ]
 
 [tool.setuptools]

@@ -1,4 +1,3 @@
-
 from pathlib import Path
 
 import typer
@@ -17,6 +16,8 @@ console = Console()
 
 
 def create(path: Path) -> None:
+    """Create a new encrypted password vault."""
+
     master_password = typer.prompt(
         "Enter master password",
         hide_input=True,
@@ -54,6 +55,8 @@ def create(path: Path) -> None:
 
 
 def open_vault(path: Path) -> None:
+    """Open and unlock an encrypted password vault."""
+
     master_password = typer.prompt(
         "Enter master password",
         hide_input=True,

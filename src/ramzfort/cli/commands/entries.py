@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from uuid import UUID
 
@@ -32,6 +31,8 @@ def _validate_entry_fields(
 
 
 def add(path: Path) -> None:
+    """Add a new password entry to an encrypted vault."""
+
     title = typer.prompt("Title")
     username = typer.prompt("Username")
 
@@ -113,11 +114,15 @@ def add(path: Path) -> None:
 
     console.print("[green]Entry added successfully.[/green]")
     if use_generator:
-        console.print("[green]Password generated and saved successfully.[/green]")
+        console.print(
+            "[green]Password generated and saved successfully.[/green]"
+        )
     console.print(Text(f"Entry ID: {entry.id}"))
 
 
 def list_entries(path: Path) -> None:
+    """List all entries stored in an encrypted vault."""
+
     session = open_vault_session(path)
 
     try:
@@ -147,7 +152,18 @@ def list_entries(path: Path) -> None:
     console.print(table)
 
 
-def get(path: Path, entry_id: UUID, show: bool = False) -> None:
+def get(
+    path: Path,
+    entry_id: UUID,
+    show: bool = typer.Option(
+        False,
+        "--show",
+        "-w",
+        help="Display the entry password without masking.",
+    ),
+) -> None:
+    """Display a specific password entry from a vault."""
+
     session = open_vault_session(path)
 
     try:
@@ -167,7 +183,9 @@ def get(path: Path, entry_id: UUID, show: bool = False) -> None:
             console.print(Text(f"Title: {entry.title}"))
             console.print(Text(f"Username: {entry.username}"))
             console.print(
-                Text(f"Password: {entry.password if show else '********'}")
+                Text(
+                    f"Password: {entry.password if show else '********'}"
+                )
             )
             console.print(Text(f"URL: {entry.url or '-'}"))
             console.print(Text(f"Notes: {entry.notes or '-'}"))
@@ -179,6 +197,8 @@ def get(path: Path, entry_id: UUID, show: bool = False) -> None:
 
 
 def update(path: Path, entry_id: UUID) -> None:
+    """Update an existing password entry in a vault."""
+
     session = open_vault_session(path)
 
     try:
@@ -196,7 +216,10 @@ def update(path: Path, entry_id: UUID) -> None:
                 raise typer.BadParameter("Vault entry not found.")
 
             title = typer.prompt("Title", default=existing.title)
-            username = typer.prompt("Username", default=existing.username)
+            username = typer.prompt(
+                "Username",
+                default=existing.username,
+            )
 
             password = typer.prompt(
                 "Password (leave empty to keep current)",
@@ -247,6 +270,8 @@ def update(path: Path, entry_id: UUID) -> None:
 
 
 def delete(path: Path, entry_id: UUID) -> None:
+    """Delete a password entry from an encrypted vault."""
+
     session = open_vault_session(path)
 
     try:
@@ -280,6 +305,8 @@ def delete(path: Path, entry_id: UUID) -> None:
 
 
 def search(path: Path, query: str) -> None:
+    """Search vault entries by title, username, or URL."""
+
     if not query.strip():
         raise typer.BadParameter("Search query must not be empty.")
 
@@ -328,6 +355,8 @@ def search(path: Path, query: str) -> None:
 
 
 def copy_password(path: Path, entry_id: UUID) -> None:
+    """Copy a vault entry password to the system clipboard."""
+
     session = open_vault_session(path)
     clipboard = ClipboardManager()
 

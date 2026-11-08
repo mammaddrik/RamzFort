@@ -12,20 +12,45 @@ console = Console()
 def generate(
     length: int = typer.Option(
         16,
+        "--length",
+        "-l",
         min=8,
         max=72,
         help="Password length (8-72 characters).",
     ),
-    lowercase: bool = typer.Option(True, help="Include lowercase letters."),
-    uppercase: bool = typer.Option(True, help="Include uppercase letters."),
-    digits: bool = typer.Option(True, help="Include digits."),
-    symbols: bool = typer.Option(True, help="Include symbols."),
+    lowercase: bool = typer.Option(
+        True,
+        "--lowercase/--no-lowercase",
+        "-a/-A",
+        help="Include lowercase letters.",
+    ),
+    uppercase: bool = typer.Option(
+        True,
+        "--uppercase/--no-uppercase",
+        "-u/-U",
+        help="Include uppercase letters.",
+    ),
+    digits: bool = typer.Option(
+        True,
+        "--digits/--no-digits",
+        "-d/-D",
+        help="Include digits.",
+    ),
+    symbols: bool = typer.Option(
+        True,
+        "--symbols/--no-symbols",
+        "-s/-S",
+        help="Include symbols.",
+    ),
     show: bool = typer.Option(
         False,
         "--show",
+        "-w",
         help="Display the generated password.",
     ),
 ) -> None:
+    """Generate a cryptographically secure password."""
+
     try:
         password = generate_password(
             length=length,

@@ -1,4 +1,3 @@
-
 import typer
 
 from ramzfort.security.password_analyzer import analyze_password
@@ -6,6 +5,8 @@ from ramzfort.ui.password_analysis import display_password_analysis
 
 
 def analyze() -> None:
+    """Analyze password strength and estimate its security."""
+
     password = typer.prompt(
         "Enter password to analyze",
         hide_input=True,

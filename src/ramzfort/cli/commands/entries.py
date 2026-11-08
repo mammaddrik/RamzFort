@@ -9,6 +9,7 @@ from rich.text import Text
 
 from ramzfort.cli.commands.vault_helpers import open_vault_session
 from ramzfort.security.clipboard import ClipboardManager
+from ramzfort.security.password_generator import generate_password
 from ramzfort.vault.models import VaultEntry
 
 console = Console()
@@ -33,9 +34,61 @@ def _validate_entry_fields(
 def add(path: Path) -> None:
     title = typer.prompt("Title")
     username = typer.prompt("Username")
-    password = typer.prompt("Password", hide_input=True)
-    url = typer.prompt("URL", default="", show_default=False)
-    notes = typer.prompt("Notes", default="", show_default=False)
+
+    use_generator = typer.confirm(
+        "Generate password?",
+        default=False,
+    )
+
+    if use_generator:
+        length = typer.prompt(
+            "Password length",
+            default=16,
+            type=int,
+        )
+        lowercase = typer.confirm(
+            "Include lowercase letters?",
+            default=True,
+        )
+        uppercase = typer.confirm(
+            "Include uppercase letters?",
+            default=True,
+        )
+        digits = typer.confirm(
+            "Include digits?",
+            default=True,
+        )
+        symbols = typer.confirm(
+            "Include symbols?",
+            default=True,
+        )
+
+        try:
+            password = generate_password(
+                length=length,
+                use_lowercase=lowercase,
+                use_uppercase=uppercase,
+                use_digits=digits,
+                use_symbols=symbols,
+            )
+        except (TypeError, ValueError) as error:
+            raise typer.BadParameter(str(error)) from error
+    else:
+        password = typer.prompt(
+            "Password",
+            hide_input=True,
+        )
+
+    url = typer.prompt(
+        "URL",
+        default="",
+        show_default=False,
+    )
+    notes = typer.prompt(
+        "Notes",
+        default="",
+        show_default=False,
+    )
 
     _validate_entry_fields(title, username, password)
 
@@ -59,6 +112,8 @@ def add(path: Path) -> None:
         session.close()
 
     console.print("[green]Entry added successfully.[/green]")
+    if use_generator:
+        console.print("[green]Password generated and saved successfully.[/green]")
     console.print(Text(f"Entry ID: {entry.id}"))
 
 
@@ -224,7 +279,6 @@ def delete(path: Path, entry_id: UUID) -> None:
     console.print("[green]Entry deleted successfully.[/green]")
 
 
-
 def search(path: Path, query: str) -> None:
     if not query.strip():
         raise typer.BadParameter("Search query must not be empty.")
@@ -271,8 +325,6 @@ def search(path: Path, query: str) -> None:
         )
 
     console.print(table)
-
-
 
 
 def copy_password(path: Path, entry_id: UUID) -> None:

@@ -36,16 +36,22 @@ def test_add_entry_success(tmp_path: Path) -> None:
     manager = VaultManager.create(vault_path, MASTER_PASSWORD)
     manager.close()
 
-    with patch(
-        "ramzfort.cli.commands.entries.typer.prompt",
-        side_effect=[
-            "GitHub",
-            "test-user",
-            ENTRY_PASSWORD,
-            "https://github.com",
-            "Test account",
-            MASTER_PASSWORD,
-        ],
+    with (
+        patch(
+            "ramzfort.cli.commands.entries.typer.prompt",
+            side_effect=[
+                "GitHub",
+                "test-user",
+                ENTRY_PASSWORD,
+                "https://github.com",
+                "Test account",
+                MASTER_PASSWORD,
+            ],
+        ),
+        patch(
+            "ramzfort.cli.commands.entries.typer.confirm",
+            return_value=False,
+        ),
     ):
         result = runner.invoke(app, ["vault", "add", str(vault_path)])
 
@@ -59,6 +65,61 @@ def test_add_entry_success(tmp_path: Path) -> None:
     assert entries[0].title == "GitHub"
     assert entries[0].username == "test-user"
     assert entries[0].password == ENTRY_PASSWORD
+
+
+def test_add_entry_with_generated_password(tmp_path: Path) -> None:
+    vault_path = tmp_path / "test.vault"
+    generated_password = "GeneratedSecret123!"
+
+    manager = VaultManager.create(vault_path, MASTER_PASSWORD)
+    manager.close()
+
+    with (
+        patch(
+            "ramzfort.cli.commands.entries.typer.prompt",
+            side_effect=[
+                "GitHub",
+                "test-user",
+                24,
+                "https://github.com",
+                "Test account",
+                MASTER_PASSWORD,
+            ],
+        ),
+        patch(
+            "ramzfort.cli.commands.entries.typer.confirm",
+            side_effect=[True, True, True, True, True],
+        ),
+        patch(
+            "ramzfort.cli.commands.entries.generate_password",
+            return_value=generated_password,
+        ) as generate_mock,
+    ):
+        result = runner.invoke(
+            app,
+            ["vault", "add", str(vault_path)],
+        )
+
+    assert result.exit_code == 0
+    assert "Entry added successfully." in result.output
+    assert "Password generated and saved successfully." in result.output
+    assert generated_password not in result.output
+
+    generate_mock.assert_called_once_with(
+        length=24,
+        use_lowercase=True,
+        use_uppercase=True,
+        use_digits=True,
+        use_symbols=True,
+    )
+
+    with VaultManager.open(vault_path, MASTER_PASSWORD) as manager:
+        entries = manager.get_entries()
+
+    assert len(entries) == 1
+    assert entries[0].title == "GitHub"
+    assert entries[0].username == "test-user"
+    assert entries[0].password == generated_password
 
 
 def test_list_entries_hides_password(tmp_path: Path) -> None:
@@ -263,7 +324,6 @@ def test_delete_entry_cancelled(tmp_path: Path) -> None:
     assert entries[0].id == entry.id
 
 
-
 def test_update_entry_clears_url_and_notes(tmp_path: Path) -> None:
     vault_path = tmp_path / "test.vault"
     entry = create_vault_with_entry(vault_path)
@@ -299,7 +359,6 @@ def test_update_entry_clears_url_and_notes(tmp_path: Path) -> None:
     assert entries[0].url is None
     assert entries[0].notes is None
     assert entries[0].password == ENTRY_PASSWORD
-
 
 
 def test_list_entries_displays_rich_markup_as_plain_text(
@@ -362,7 +421,6 @@ def test_get_entry_displays_rich_markup_as_plain_text(
     assert "[green]Private notes[/green]" in result.output
 
 
-
 def test_get_entry_rejects_invalid_uuid(tmp_path: Path) -> None:
     vault_path = tmp_path / "test.vault"
 
@@ -381,7 +439,6 @@ def test_get_entry_rejects_invalid_uuid(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "Invalid value" in result.output
-
 
 
 def test_update_entry_rejects_invalid_uuid(tmp_path: Path) -> None:
@@ -424,7 +481,6 @@ def test_delete_entry_rejects_invalid_uuid(tmp_path: Path) -> None:
     assert "Invalid value" in result.output
 
 
-
 def test_list_entries_rejects_missing_vault(tmp_path: Path) -> None:
     vault_path = tmp_path / "missing.vault"
 
@@ -441,22 +497,27 @@ def test_list_entries_rejects_missing_vault(tmp_path: Path) -> None:
     assert "Vault file does not exist." in result.output
 
 
-
 def test_add_entry_rejects_empty_title(tmp_path: Path) -> None:
     vault_path = tmp_path / "test.vault"
 
     manager = VaultManager.create(vault_path, MASTER_PASSWORD)
     manager.close()
 
-    with patch(
-        "ramzfort.cli.commands.entries.typer.prompt",
-        side_effect=[
-            "",
-            "test-user",
-            ENTRY_PASSWORD,
-            "https://github.com",
-            "Test account",
-        ],
+    with (
+        patch(
+            "ramzfort.cli.commands.entries.typer.prompt",
+            side_effect=[
+                "",
+                "test-user",
+                ENTRY_PASSWORD,
+                "https://github.com",
+                "Test account",
+            ],
+        ),
+        patch(
+            "ramzfort.cli.commands.entries.typer.confirm",
+            return_value=False,
+        ),
     ):
         result = runner.invoke(
             app,
@@ -470,22 +531,27 @@ def test_add_entry_rejects_empty_title(tmp_path: Path) -> None:
         assert manager.get_entries() == ()
 
 
-
 def test_add_entry_rejects_empty_username(tmp_path: Path) -> None:
     vault_path = tmp_path / "test.vault"
 
     manager = VaultManager.create(vault_path, MASTER_PASSWORD)
     manager.close()
 
-    with patch(
-        "ramzfort.cli.commands.entries.typer.prompt",
-        side_effect=[
-            "GitHub",
-            "",
-            ENTRY_PASSWORD,
-            "",
-            "",
-        ],
+    with (
+        patch(
+            "ramzfort.cli.commands.entries.typer.prompt",
+            side_effect=[
+                "GitHub",
+                "",
+                ENTRY_PASSWORD,
+                "",
+                "",
+            ],
+        ),
+        patch(
+            "ramzfort.cli.commands.entries.typer.confirm",
+            return_value=False,
+        ),
     ):
         result = runner.invoke(
             app,
@@ -505,15 +571,21 @@ def test_add_entry_rejects_empty_password(tmp_path: Path) -> None:
     manager = VaultManager.create(vault_path, MASTER_PASSWORD)
     manager.close()
 
-    with patch(
-        "ramzfort.cli.commands.entries.typer.prompt",
-        side_effect=[
-            "GitHub",
-            "test-user",
-            "",
-            "",
-            "",
-        ],
+    with (
+        patch(
+            "ramzfort.cli.commands.entries.typer.prompt",
+            side_effect=[
+                "GitHub",
+                "test-user",
+                "",
+                "",
+                "",
+            ],
+        ),
+        patch(
+            "ramzfort.cli.commands.entries.typer.confirm",
+            return_value=False,
+        ),
     ):
         result = runner.invoke(
             app,
@@ -525,7 +597,6 @@ def test_add_entry_rejects_empty_password(tmp_path: Path) -> None:
 
     with VaultManager.open(vault_path, MASTER_PASSWORD) as manager:
         assert manager.get_entries() == ()
-
 
 
 def test_update_entry_rejects_empty_title(tmp_path: Path) -> None:
@@ -562,7 +633,6 @@ def test_update_entry_rejects_empty_title(tmp_path: Path) -> None:
     assert len(entries) == 1
     assert entries[0].title == entry.title
     assert entries[0].password == ENTRY_PASSWORD
-
 
 
 def test_update_entry_rejects_empty_username(tmp_path: Path) -> None:
@@ -642,15 +712,21 @@ def test_add_entry_rejects_whitespace_only_fields(tmp_path: Path) -> None:
     manager = VaultManager.create(vault_path, MASTER_PASSWORD)
     manager.close()
 
-    with patch(
-        "ramzfort.cli.commands.entries.typer.prompt",
-        side_effect=[
-            "   ",
-            "test-user",
-            ENTRY_PASSWORD,
-            "",
-            "",
-        ],
+    with (
+        patch(
+            "ramzfort.cli.commands.entries.typer.prompt",
+            side_effect=[
+                "   ",
+                "test-user",
+                ENTRY_PASSWORD,
+                "",
+                "",
+            ],
+        ),
+        patch(
+            "ramzfort.cli.commands.entries.typer.confirm",
+            return_value=False,
+        ),
     ):
         result = runner.invoke(
             app,
@@ -723,7 +799,6 @@ def test_delete_entry_not_found(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "Vault entry not found." in result.output
-
 
 
 def test_search_finds_entry_by_title(tmp_path: Path) -> None:
@@ -812,7 +887,6 @@ def test_search_rejects_empty_query(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "Search query must not be empty." in result.output
-
 
 
 def test_copy_password_success(tmp_path: Path) -> None:

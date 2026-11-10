@@ -15,8 +15,14 @@ from ramzfort.vault.session_state import SessionState
 console = Console()
 
 
+
 def create(path: Path) -> None:
     """Create a new encrypted password vault."""
+
+    if path.exists():
+        raise typer.BadParameter(
+            "A file already exists at the specified path."
+        )
 
     master_password = typer.prompt(
         "Enter master password",

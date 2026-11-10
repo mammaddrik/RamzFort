@@ -9,11 +9,16 @@ def _write_temporary_file(
     target: Path,
     data: bytes,
 ) -> tuple[int, Path]:
-    file_descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{target.name}.",
-        suffix=".tmp",
-        dir=target.parent,
-    )
+    try:
+        file_descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            dir=target.parent,
+        )
+    except OSError as error:
+        raise OSError(
+            "Unable to create temporary vault file."
+        ) from error
 
     temporary_path = Path(temporary_name)
 
@@ -31,6 +36,18 @@ def _write_temporary_file(
             os.fsync(temporary_file.fileno())
 
         return 0, temporary_path
+
+    except OSError as error:
+        if file_descriptor != -1:
+            with contextlib.suppress(OSError):
+                os.close(file_descriptor)
+
+        with contextlib.suppress(OSError):
+            temporary_path.unlink()
+
+        raise OSError(
+            "Unable to write temporary vault file."
+        ) from error
 
     except BaseException:
         if file_descriptor != -1:
@@ -56,7 +73,10 @@ def write_atomically(path: str | Path, data: bytes) -> None:
 
     try:
         os.replace(temporary_path, target)
-
+    except OSError as error:
+        raise OSError(
+            "Unable to replace vault file."
+        ) from error
     finally:
         with contextlib.suppress(OSError):
             temporary_path.unlink()
@@ -75,7 +95,14 @@ def create_atomically(path: str | Path, data: bytes) -> None:
 
     try:
         os.link(temporary_path, target)
-
+    except FileExistsError as error:
+        raise FileExistsError(
+            "A file already exists at the specified path."
+        ) from error
+    except OSError as error:
+        raise OSError(
+            "Unable to create vault file."
+        ) from error
     finally:
         with contextlib.suppress(OSError):
             temporary_path.unlink()

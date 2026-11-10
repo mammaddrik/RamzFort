@@ -229,6 +229,7 @@ def get(
         session.close()
 
 
+
 def update(path: Path, entry_id: UUID) -> None:
     """Update an existing password entry in a vault."""
 
@@ -248,7 +249,10 @@ def update(path: Path, entry_id: UUID) -> None:
             if existing is None:
                 raise typer.BadParameter("Vault entry not found.")
 
-            title = typer.prompt("Title", default=existing.title)
+            title = typer.prompt(
+                "Title",
+                default=existing.title,
+            )
             username = typer.prompt(
                 "Username",
                 default=existing.username,
@@ -262,18 +266,20 @@ def update(path: Path, entry_id: UUID) -> None:
             )
 
             url = typer.prompt(
-                "URL (leave empty to remove)",
-                default="",
+                "URL (leave empty to keep current)",
+                default=existing.url or "",
                 show_default=False,
             )
 
             notes = typer.prompt(
-                "Notes (leave empty to remove)",
-                default="",
+                "Notes (leave empty to keep current)",
+                default=existing.notes or "",
                 show_default=False,
             )
 
             updated_password = password or existing.password
+            updated_url = url or existing.url
+            updated_notes = notes or existing.notes
 
             _validate_entry_fields(
                 title,
@@ -287,8 +293,8 @@ def update(path: Path, entry_id: UUID) -> None:
                     title=title,
                     username=username,
                     password=updated_password,
-                    url=url or None,
-                    notes=notes or None,
+                    url=updated_url,
+                    notes=updated_notes,
                     created_at=existing.created_at,
                     updated_at=existing.updated_at,
                 )

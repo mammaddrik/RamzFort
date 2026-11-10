@@ -164,6 +164,7 @@ def list_entries(path: Path) -> None:
     console.print(table)
 
 
+
 def get(
     path: Path,
     entry_id: UUID,
@@ -214,8 +215,12 @@ def get(
 
             metadata.add_row(
                 str(entry.id),
-                entry.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                entry.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
+                entry.created_at.astimezone().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
+                entry.updated_at.astimezone().strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                ),
             )
 
             console.print(table)

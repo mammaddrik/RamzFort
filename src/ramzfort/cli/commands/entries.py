@@ -164,7 +164,6 @@ def list_entries(path: Path) -> None:
     console.print(table)
 
 
-
 def get(
     path: Path,
     entry_id: UUID,
@@ -229,8 +228,22 @@ def get(
         session.close()
 
 
-
-def update(path: Path, entry_id: UUID) -> None:
+def update(
+    path: Path,
+    entry_id: UUID,
+    clear_url: bool = typer.Option(
+        False,
+        "--clear-url",
+        "-U",
+        help="Remove the saved URL.",
+    ),
+    clear_notes: bool = typer.Option(
+        False,
+        "--clear-notes",
+        "-N",
+        help="Remove saved notes.",
+    ),
+) -> None:
     """Update an existing password entry in a vault."""
 
     session = open_vault_session(path)
@@ -265,21 +278,27 @@ def update(path: Path, entry_id: UUID) -> None:
                 show_default=False,
             )
 
-            url = typer.prompt(
-                "URL (leave empty to keep current)",
-                default=existing.url or "",
-                show_default=False,
-            )
+            if clear_url:
+                updated_url = None
+            else:
+                url = typer.prompt(
+                    "URL (leave empty to keep current)",
+                    default=existing.url or "",
+                    show_default=False,
+                )
+                updated_url = url or existing.url
 
-            notes = typer.prompt(
-                "Notes (leave empty to keep current)",
-                default=existing.notes or "",
-                show_default=False,
-            )
+            if clear_notes:
+                updated_notes = None
+            else:
+                notes = typer.prompt(
+                    "Notes (leave empty to keep current)",
+                    default=existing.notes or "",
+                    show_default=False,
+                )
+                updated_notes = notes or existing.notes
 
             updated_password = password or existing.password
-            updated_url = url or existing.url
-            updated_notes = notes or existing.notes
 
             _validate_entry_fields(
                 title,

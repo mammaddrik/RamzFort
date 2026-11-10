@@ -192,18 +192,34 @@ def get(
             if entry is None:
                 raise typer.BadParameter("Vault entry not found.")
 
-            console.print(Text(f"Title: {entry.title}"))
-            console.print(Text(f"Username: {entry.username}"))
-            console.print(
-                Text(
-                    f"Password: {entry.password if show else '********'}"
-                )
+            table = Table(title="Vault Entry Details")
+            table.add_column("Title", overflow="ellipsis")
+            table.add_column("Username", overflow="ellipsis")
+            table.add_column("Password", overflow="ellipsis")
+            table.add_column("URL", overflow="ellipsis")
+            table.add_column("Notes", max_width=40, overflow="ellipsis")
+
+            table.add_row(
+                Text(entry.title),
+                Text(entry.username),
+                Text(entry.password if show else "********"),
+                Text(entry.url or "-"),
+                Text(entry.notes or "-"),
             )
-            console.print(Text(f"URL: {entry.url or '-'}"))
-            console.print(Text(f"Notes: {entry.notes or '-'}"))
-            console.print(Text(f"ID: {entry.id}"))
-            console.print(Text(f"Created: {entry.created_at.isoformat()}"))
-            console.print(Text(f"Updated: {entry.updated_at.isoformat()}"))
+
+            metadata = Table()
+            metadata.add_column("ID", style="cyan", overflow="ellipsis")
+            metadata.add_column("Created")
+            metadata.add_column("Updated")
+
+            metadata.add_row(
+                str(entry.id),
+                entry.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                entry.updated_at.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+
+            console.print(table)
+            console.print(metadata)
     finally:
         session.close()
 

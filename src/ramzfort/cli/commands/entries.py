@@ -1,3 +1,4 @@
+
 from pathlib import Path
 from uuid import UUID
 
@@ -120,6 +121,20 @@ def add(path: Path) -> None:
     console.print(Text(f"Entry ID: {entry.id}"))
 
 
+def _create_entries_table(title: str) -> Table:
+    table = Table(title=title)
+    table.add_column("ID", style="cyan", no_wrap=True)
+    table.add_column("Title", overflow="ellipsis")
+    table.add_column("Username", overflow="ellipsis")
+    table.add_column("URL", overflow="ellipsis")
+    table.add_column(
+        "Notes",
+        max_width=40,
+        overflow="ellipsis",
+    )
+    return table
+
+
 def list_entries(path: Path) -> None:
     """List all entries stored in an encrypted vault."""
 
@@ -135,11 +150,7 @@ def list_entries(path: Path) -> None:
         console.print("[yellow]Vault is empty.[/yellow]")
         return
 
-    table = Table(title="Vault Entries")
-    table.add_column("ID", style="cyan")
-    table.add_column("Title")
-    table.add_column("Username")
-    table.add_column("URL")
+    table = _create_entries_table("Vault Entries")
 
     for entry in entries:
         table.add_row(
@@ -147,6 +158,7 @@ def list_entries(path: Path) -> None:
             Text(entry.title),
             Text(entry.username),
             Text(entry.url or "-"),
+            Text(entry.notes or "-"),
         )
 
     console.print(table)
@@ -337,11 +349,7 @@ def search(path: Path, query: str) -> None:
         console.print("[yellow]No matching entries found.[/yellow]")
         return
 
-    table = Table(title="Search Results")
-    table.add_column("ID", style="cyan")
-    table.add_column("Title")
-    table.add_column("Username")
-    table.add_column("URL")
+    table = _create_entries_table("Search Results")
 
     for entry in matches:
         table.add_row(
@@ -349,6 +357,7 @@ def search(path: Path, query: str) -> None:
             Text(entry.title),
             Text(entry.username),
             Text(entry.url or "-"),
+            Text(entry.notes or "-"),
         )
 
     console.print(table)

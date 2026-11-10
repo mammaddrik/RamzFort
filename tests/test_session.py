@@ -376,7 +376,9 @@ def test_locked_session_rejects_vault_operations(
         session.save()
 
 
-def test_context_manager_closes_session(session: VaultSession) -> None:
+def test_context_manager_closes_session(
+    session: VaultSession,
+) -> None:
     with session as active_session:
         assert active_session is session
         assert session.state is SessionState.ACTIVE
@@ -405,3 +407,118 @@ def test_locked_session_blocks_internal_write(
     assert session.state is SessionState.LOCKED
 
     session.close()
+
+
+def test_operation_updates_last_activity_on_entry(
+    manager: VaultManager,
+) -> None:
+    clock = FakeClock()
+    session = VaultSession(manager, idle_timeout=10, clock=clock)
+
+    clock.advance(5)
+
+    with session.operation():
+        assert session.last_activity == 105.0
+
+    assert session.state is SessionState.ACTIVE
+
+
+def test_operation_prevents_auto_lock_during_long_operation(
+    manager: VaultManager,
+) -> None:
+    clock = FakeClock()
+    session = VaultSession(manager, idle_timeout=10, clock=clock)
+
+    with session.operation():
+        clock.advance(20)
+
+        assert session.get_entries() == ()
+        assert session.state is SessionState.ACTIVE
+
+    assert session.state is SessionState.ACTIVE
+    assert session.last_activity == 120.0
+
+
+def test_operation_resets_idle_timeout_after_completion(
+    manager: VaultManager,
+) -> None:
+    clock = FakeClock()
+    session = VaultSession(manager, idle_timeout=10, clock=clock)
+
+    with session.operation():
+        clock.advance(20)
+
+    assert session.last_activity == 120.0
+
+    clock.advance(9)
+
+    assert not session.is_expired()
+
+    clock.advance(1)
+
+    assert session.is_expired()
+
+
+def test_nested_operations_work_correctly(
+    manager: VaultManager,
+) -> None:
+    clock = FakeClock()
+    session = VaultSession(manager, idle_timeout=10, clock=clock)
+
+    with session.operation():
+        clock.advance(3)
+
+        with session.operation():
+            clock.advance(4)
+            assert session.get_entries() == ()
+
+        assert session.state is SessionState.ACTIVE
+
+        clock.advance(4)
+        assert session.get_entries() == ()
+
+    assert session.state is SessionState.ACTIVE
+    assert session.last_activity == 111.0
+
+
+def test_expired_session_rejects_new_operation(
+    manager: VaultManager,
+) -> None:
+    clock = FakeClock()
+    session = VaultSession(manager, idle_timeout=10, clock=clock)
+
+    clock.advance(10)
+
+    with (
+        pytest.raises(RuntimeError, match="Session expired and was locked"),
+        session.operation(),
+    ):
+        session.get_entries()
+
+    assert session.state is SessionState.LOCKED
+    assert manager._locked
+
+
+def test_operation_restores_state_after_exception(
+    manager: VaultManager,
+) -> None:
+    clock = FakeClock()
+    session = VaultSession(manager, idle_timeout=10, clock=clock)
+
+    with pytest.raises(ValueError, match="Test exception"), session.operation():
+        clock.advance(20)
+        raise ValueError("Test exception")
+
+    assert session.state is SessionState.ACTIVE
+    assert session.last_activity == 120.0
+
+    clock.advance(9)
+
+    assert not session.is_expired()
+
+    clock.advance(1)
+
+    assert session.is_expired()
+
+    with pytest.raises(RuntimeError, match="expired"):
+        session.get_entries()

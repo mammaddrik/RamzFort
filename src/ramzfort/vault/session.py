@@ -1,6 +1,7 @@
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from uuid import UUID
 
 from ramzfort.vault.manager import VaultManager
@@ -33,6 +34,7 @@ class VaultSession:
         self._clock = clock
         self._last_activity = clock()
         self._state = SessionState.ACTIVE
+        self._operation_depth = 0
 
         self._manager._bind_access_guard(self._check_activity)
 
@@ -61,8 +63,40 @@ class VaultSession:
             >= self._idle_timeout
         )
 
+    def check_idle_timeout(self) -> bool:
+        if self._state is not SessionState.ACTIVE:
+            return False
+
+        if not self.is_expired():
+            return False
+
+        self.lock()
+        return True
+
+    @contextmanager
+    def operation(self) -> Iterator[None]:
+        self._ensure_active()
+
+        if self._operation_depth == 0 and self.is_expired():
+            self.lock()
+            raise RuntimeError("Session expired and was locked.")
+
+        self._operation_depth += 1
+        self._last_activity = self._clock()
+
+        try:
+            yield
+        finally:
+            self._operation_depth -= 1
+
+            if self._state is SessionState.ACTIVE:
+                self._last_activity = self._clock()
+
     def _check_activity(self) -> None:
         self._ensure_active()
+
+        if self._operation_depth > 0:
+            return
 
         if self.is_expired():
             self.lock()
@@ -131,4 +165,3 @@ class VaultSession:
 
         if self._state is SessionState.LOCKED:
             raise RuntimeError("Session is locked.")
-

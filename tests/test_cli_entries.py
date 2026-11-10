@@ -324,6 +324,7 @@ def test_delete_entry_cancelled(tmp_path: Path) -> None:
     assert entries[0].id == entry.id
 
 
+
 def test_update_entry_clears_url_and_notes(tmp_path: Path) -> None:
     vault_path = tmp_path / "test.vault"
     entry = create_vault_with_entry(vault_path)
@@ -335,8 +336,6 @@ def test_update_entry_clears_url_and_notes(tmp_path: Path) -> None:
             entry.title,
             entry.username,
             "",
-            "",
-            "",
         ],
     ):
         result = runner.invoke(
@@ -346,6 +345,8 @@ def test_update_entry_clears_url_and_notes(tmp_path: Path) -> None:
                 "update",
                 str(vault_path),
                 str(entry.id),
+                "--clear-url",
+                "--clear-notes",
             ],
         )
 

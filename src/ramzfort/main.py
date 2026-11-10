@@ -10,6 +10,10 @@ from typer._click.core import Command, Context
 from typer._click.formatting import HelpFormatter
 from typer.core import TyperGroup
 
+from ramzfort.cli.command_metadata import (
+    VAULT_COMMAND_ALIASES,
+    VAULT_COMMANDS,
+)
 from ramzfort.cli.commands.analyze import analyze
 from ramzfort.cli.commands.entries import (
     add,
@@ -25,6 +29,11 @@ from ramzfort.cli.commands.vault import create, open_vault
 
 HELP_CONTEXT_SETTINGS = {
     "help_option_names": ["-h", "--help"],
+}
+
+VAULT_COMMAND_HELP = {
+    name: description
+    for name, _, description in VAULT_COMMANDS
 }
 
 
@@ -157,17 +166,7 @@ class RootCommandGroup(AliasedCommandGroup):
 
 
 class VaultCommandGroup(AliasedCommandGroup):
-    command_aliases = {
-        "-c": "create",
-        "-o": "open",
-        "-n": "add",
-        "-l": "list",
-        "-g": "get",
-        "-u": "update",
-        "-d": "delete",
-        "-s": "search",
-        "-p": "copy",
-    }
+    command_aliases = VAULT_COMMAND_ALIASES
 
 
 app = typer.Typer(
@@ -216,65 +215,50 @@ app.command(
 
 vault_app.command(
     context_settings=HELP_CONTEXT_SETTINGS,
-    help="Create a new encrypted vault protected by a master password.",
+    help=VAULT_COMMAND_HELP["create"],
 )(create)
 
 vault_app.command(
     name="open",
     context_settings=HELP_CONTEXT_SETTINGS,
-    help=(
-        "Unlock an existing encrypted vault to access and manage "
-        "its stored credentials."
-    ),
+    help=VAULT_COMMAND_HELP["open"],
 )(open_vault)
 
 vault_app.command(
     context_settings=HELP_CONTEXT_SETTINGS,
-    help=(
-        "Add a new account entry with a username, password, URL, "
-        "and optional notes."
-    ),
+    help=VAULT_COMMAND_HELP["add"],
 )(add)
 
 vault_app.command(
     name="list",
     context_settings=HELP_CONTEXT_SETTINGS,
-    help=(
-        "Display the entries stored in a vault, including their "
-        "titles and identifiers."
-    ),
+    help=VAULT_COMMAND_HELP["list"],
 )(list_entries)
 
 vault_app.command(
     context_settings=HELP_CONTEXT_SETTINGS,
-    help="Retrieve and display the details of a specific vault entry.",
+    help=VAULT_COMMAND_HELP["get"],
 )(get)
 
 vault_app.command(
     context_settings=HELP_CONTEXT_SETTINGS,
-    help=(
-        "Modify the stored credentials and details of an existing "
-        "vault entry."
-    ),
+    help=VAULT_COMMAND_HELP["update"],
 )(update)
 
 vault_app.command(
     context_settings=HELP_CONTEXT_SETTINGS,
-    help="Permanently remove a selected entry from an encrypted vault.",
+    help=VAULT_COMMAND_HELP["delete"],
 )(delete)
 
 vault_app.command(
     context_settings=HELP_CONTEXT_SETTINGS,
-    help=(
-        "Find vault entries by searching their available account "
-        "information."
-    ),
+    help=VAULT_COMMAND_HELP["search"],
 )(search)
 
 vault_app.command(
     name="copy",
     context_settings=HELP_CONTEXT_SETTINGS,
-    help="Copy a selected entry's password to the system clipboard.",
+    help=VAULT_COMMAND_HELP["copy"],
 )(copy_password)
 
 app.add_typer(vault_app, name="vault")

@@ -8,7 +8,7 @@ from pathlib import Path
 def _write_temporary_file(
     target: Path,
     data: bytes,
-) -> tuple[int, Path]:
+) -> Path:
     try:
         file_descriptor, temporary_name = tempfile.mkstemp(
             prefix=f".{target.name}.",
@@ -35,7 +35,7 @@ def _write_temporary_file(
             temporary_file.flush()
             os.fsync(temporary_file.fileno())
 
-        return 0, temporary_path
+        return temporary_path
 
     except OSError as error:
         if file_descriptor != -1:
@@ -60,7 +60,10 @@ def _write_temporary_file(
         raise
 
 
-def write_atomically(path: str | Path, data: bytes) -> None:
+def write_atomically(
+    path: str | Path,
+    data: bytes,
+) -> None:
     if not isinstance(data, bytes):
         raise TypeError("Data must be bytes.")
 
@@ -69,20 +72,23 @@ def write_atomically(path: str | Path, data: bytes) -> None:
     if not target.name:
         raise ValueError("Target path must reference a file.")
 
-    _, temporary_path = _write_temporary_file(target, data)
+    temporary_path = _write_temporary_file(target, data)
 
     try:
         os.replace(temporary_path, target)
     except OSError as error:
         raise OSError(
-            "Unable to replace vault file."
+            f"Unable to replace vault file: {error}"
         ) from error
     finally:
         with contextlib.suppress(OSError):
             temporary_path.unlink()
 
 
-def create_atomically(path: str | Path, data: bytes) -> None:
+def create_atomically(
+    path: str | Path,
+    data: bytes,
+) -> None:
     if not isinstance(data, bytes):
         raise TypeError("Data must be bytes.")
 
@@ -91,7 +97,7 @@ def create_atomically(path: str | Path, data: bytes) -> None:
     if not target.name:
         raise ValueError("Target path must reference a file.")
 
-    _, temporary_path = _write_temporary_file(target, data)
+    temporary_path = _write_temporary_file(target, data)
 
     try:
         os.link(temporary_path, target)
@@ -101,7 +107,7 @@ def create_atomically(path: str | Path, data: bytes) -> None:
         ) from error
     except OSError as error:
         raise OSError(
-            "Unable to create vault file."
+            f"Unable to create vault file: {error}"
         ) from error
     finally:
         with contextlib.suppress(OSError):

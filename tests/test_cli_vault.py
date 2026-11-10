@@ -130,11 +130,19 @@ def test_open_vault_locks_expired_session(tmp_path: Path) -> None:
         clock=lambda: clock_value[0],
     )
 
+    prompt_count = 0
+
     def prompt_side_effect(*args: object, **kwargs: object) -> str:
+        nonlocal prompt_count
+
         prompt_text = str(args[0]) if args else ""
 
         if prompt_text == "vault":
             clock_value[0] += 6.0
+            prompt_count += 1
+
+            if prompt_count > 1:
+                return "exit"
 
         return "status"
 

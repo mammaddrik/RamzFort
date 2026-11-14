@@ -1,6 +1,9 @@
 
+import multiprocessing
 from datetime import timedelta
+from multiprocessing.synchronize import Event
 from pathlib import Path
+from queue import Empty
 from typing import Any, cast
 from uuid import uuid4
 
@@ -834,3 +837,207 @@ def test_context_manager_rejects_manager_with_active_session(
     assert session.state is SessionState.ACTIVE
 
     session.close()
+
+
+def test_concurrent_managers_only_allow_first_save(
+    tmp_path: Path,
+) -> None:
+    vault_path = tmp_path / "test.vault"
+    master_password = "StrongMasterPassword123!"
+
+    first_manager = VaultManager.create(
+        vault_path,
+        master_password,
+    )
+    second_manager = VaultManager.open(
+        vault_path,
+        master_password,
+    )
+
+    first_entry = VaultEntry(
+        title="First",
+        username="first-user",
+        password="FirstPassword123!",
+    )
+    second_entry = VaultEntry(
+        title="Second",
+        username="second-user",
+        password="SecondPassword123!",
+    )
+
+    first_manager.add_entry(first_entry)
+
+    with pytest.raises(ConcurrentModificationError):
+        second_manager.add_entry(second_entry)
+
+    reopened_manager = VaultManager.open(
+        vault_path,
+        master_password,
+    )
+
+    assert reopened_manager.get_entries() == (first_entry,)
+
+
+def test_failed_concurrent_save_preserves_manager_digest(
+    tmp_path: Path,
+) -> None:
+    vault_path = tmp_path / "test.vault"
+    master_password = "StrongMasterPassword123!"
+
+    first_manager = VaultManager.create(
+        vault_path,
+        master_password,
+    )
+    second_manager = VaultManager.open(
+        vault_path,
+        master_password,
+    )
+
+    first_manager.save()
+    original_digest = second_manager._file_digest
+
+    with pytest.raises(ConcurrentModificationError):
+        second_manager.save()
+
+    assert second_manager._file_digest == original_digest
+
+
+def test_concurrent_modification_preserves_external_data(
+    tmp_path: Path,
+) -> None:
+    vault_path = tmp_path / "test.vault"
+    master_password = "StrongMasterPassword123!"
+
+    first_manager = VaultManager.create(
+        vault_path,
+        master_password,
+    )
+    second_manager = VaultManager.open(
+        vault_path,
+        master_password,
+    )
+
+    first_entry = VaultEntry(
+        title="First",
+        username="first-user",
+        password="FirstPassword123!",
+    )
+
+    first_manager.add_entry(first_entry)
+    expected_data = vault_path.read_bytes()
+
+    with pytest.raises(ConcurrentModificationError):
+        second_manager.save()
+
+    assert vault_path.read_bytes() == expected_data
+
+
+def _write_from_process(
+    vault_path: str,
+    master_password: str,
+    title: str,
+    ready: Event,
+    start: Event,
+    results: Any,
+) -> None:
+    manager = VaultManager.open(vault_path, master_password)
+
+    try:
+        ready.set()
+
+        if not start.wait(10):
+            results.put("timeout")
+            return
+
+        entry = VaultEntry(
+            title=title,
+            username=f"{title.lower()}-user",
+            password=f"{title}Password123!",
+        )
+
+        manager.add_entry(entry)
+        results.put("success")
+    except ConcurrentModificationError:
+        results.put("conflict")
+    except Exception as error:
+        results.put(f"error: {type(error).__name__}: {error}")
+    finally:
+        manager.close()
+
+
+def test_multiprocess_managers_prevent_lost_updates(
+    tmp_path: Path,
+) -> None:
+    vault_path = tmp_path / "test.vault"
+    master_password = "StrongMasterPassword123!"
+
+    manager = VaultManager.create(vault_path, master_password)
+    manager.close()
+
+    context = multiprocessing.get_context("spawn")
+    ready = context.Event()
+    start = context.Event()
+    results = context.Queue()
+
+    processes = [
+        context.Process(
+            target=_write_from_process,
+            args=(
+                str(vault_path),
+                master_password,
+                title,
+                ready,
+                start,
+                results,
+            ),
+        )
+        for title in ("First", "Second")
+    ]
+
+    started_processes = []
+
+    try:
+        for process in processes:
+            process.start()
+            started_processes.append(process)
+
+        assert ready.wait(15)
+
+        start.set()
+
+        process_results = []
+
+        for _ in processes:
+            try:
+                process_results.append(results.get(timeout=20))
+            except Empty:
+                pytest.fail("A worker process did not return a result.")
+
+        for process in processes:
+            process.join(20)
+
+        assert all(not process.is_alive() for process in processes)
+        assert all(process.exitcode == 0 for process in processes)
+
+        assert process_results.count("success") == 1
+        assert process_results.count("conflict") == 1
+
+        reopened_manager = VaultManager.open(
+            vault_path,
+            master_password,
+        )
+
+        entries = reopened_manager.get_entries()
+
+        assert len(entries) == 1
+        assert entries[0].title in {"First", "Second"}
+    finally:
+        start.set()
+
+        for process in started_processes:
+            if process.is_alive():
+                process.terminate()
+            process.join(5)
+
+        results.close()
+        results.join_thread()

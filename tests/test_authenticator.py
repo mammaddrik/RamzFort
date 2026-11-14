@@ -115,20 +115,22 @@ def test_success_resets_failure_count(
             manager.close()
 
 
-def test_maximum_attempts_block_vault_open(
+def test_maximum_attempts_allow_retry_after_delay(
     authenticator: VaultAuthenticator,
     guard: AuthenticationGuard,
 ) -> None:
     for _ in range(3):
         guard.record_failure()
 
-    with patch.object(VaultManager, "open") as open_vault, pytest.raises(
-        RuntimeError,
-        match="Maximum authentication attempts",
-    ):
+    with patch.object(
+        VaultManager,
+        "open",
+        side_effect=InvalidMasterPasswordError("Invalid password."),
+    ) as open_vault, pytest.raises(InvalidMasterPasswordError):
         authenticator.open_vault("test.vault", "password")
 
-    open_vault.assert_not_called()
+    open_vault.assert_called_once()
+    assert guard.failed_attempts == 4
 
 
 def test_session_creation_failure_closes_manager(

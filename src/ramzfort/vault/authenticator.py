@@ -1,7 +1,10 @@
 
 from pathlib import Path
 
-from ramzfort.vault.authentication import AuthenticationGuard
+from ramzfort.vault.authentication import (
+    AuthenticationGuard,
+    PersistentAuthenticationGuard,
+)
 from ramzfort.vault.exceptions import InvalidMasterPasswordError
 from ramzfort.vault.manager import VaultManager
 from ramzfort.vault.session import DEFAULT_IDLE_TIMEOUT, VaultSession
@@ -25,7 +28,9 @@ class VaultAuthenticator:
             raise ValueError("Idle timeout must be greater than zero.")
 
         self._guard = (
-            guard if guard is not None else AuthenticationGuard()
+            guard
+            if guard is not None
+            else PersistentAuthenticationGuard()
         )
         self._idle_timeout = float(idle_timeout)
 
@@ -38,18 +43,21 @@ class VaultAuthenticator:
         path: str | Path,
         master_password: str,
     ) -> VaultSession:
-        self._guard.check_allowed()
+        manager: VaultManager
 
-        try:
-            manager = VaultManager.open(
-                path=path,
-                master_password=master_password,
-            )
-        except InvalidMasterPasswordError:
-            self._guard.record_failure()
-            raise
+        with self._guard.authentication_attempt(path):
+            self._guard.check_allowed()
 
-        self._guard.record_success()
+            try:
+                manager = VaultManager.open(
+                    path=path,
+                    master_password=master_password,
+                )
+            except InvalidMasterPasswordError:
+                self._guard.record_failure()
+                raise
+
+            self._guard.record_success()
 
         try:
             return VaultSession(

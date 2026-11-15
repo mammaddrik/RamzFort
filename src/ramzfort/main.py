@@ -1,5 +1,6 @@
 
 import sys
+from importlib.metadata import PackageNotFoundError, version
 
 import typer
 from rich.console import Console
@@ -30,6 +31,20 @@ from ramzfort.cli.commands.vault import create, open_vault, recover
 HELP_CONTEXT_SETTINGS = {
     "help_option_names": ["-h", "--help"],
 }
+
+
+def get_version() -> str:
+    try:
+        return version("ramzfort")
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"RamzFort {get_version()}")
+        raise typer.Exit()
+
 
 VAULT_COMMAND_HELP = {
     name: description
@@ -202,7 +217,15 @@ vault_app = typer.Typer(
 
 
 @app.callback()
-def main_callback() -> None:
+def main_callback(
+    show_version: bool = typer.Option(
+        False,
+        "--version",
+        callback=version_callback,
+        is_eager=True,
+        help="Show the installed RamzFort version and exit.",
+    ),
+) -> None:
     pass
 
 

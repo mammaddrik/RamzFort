@@ -7,17 +7,19 @@ runner = CliRunner()
 
 
 def test_analyze_command_displays_analysis() -> None:
+    password = "password123"
+
     result = runner.invoke(
         app,
         ["analyze"],
-        input="password123\n",
+        input=f"{password}\n",
     )
 
     assert result.exit_code == 0
     assert "PASSWORD SECURITY REPORT" in result.output
     assert "CRACK TIME ESTIMATES" in result.output
     assert "SECURITY FEEDBACK" in result.output
-    assert "password123" not in result.output
+    assert password not in result.output
 
 
 def test_analyze_command_rejects_empty_password() -> None:

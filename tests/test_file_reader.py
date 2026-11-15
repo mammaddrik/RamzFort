@@ -37,7 +37,7 @@ def test_reader_rejects_incomplete_header(tmp_path: Path) -> None:
     target = tmp_path / "ramzfort.vault"
     target.write_bytes(b"RZFV")
 
-    with pytest.raises(ValueError, match="header size"):
+    with pytest.raises(ValueError, match="Invalid vault file header"):
         read_vault_file(target)
 
 
@@ -104,7 +104,7 @@ def test_read_vault_data_rejects_non_bytes() -> None:
 
 
 def test_read_vault_data_rejects_incomplete_header() -> None:
-    with pytest.raises(ValueError, match="header size"):
+    with pytest.raises(ValueError, match="Invalid vault file header"):
         read_vault_data(b"RZFV")
 
 

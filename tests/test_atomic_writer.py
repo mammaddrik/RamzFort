@@ -7,7 +7,10 @@ from typing import Any, cast
 
 import pytest
 
-from ramzfort.vault.atomic_writer import create_atomically, write_atomically
+from ramzfort.vault.atomic_writer import (
+    create_atomically,
+    write_atomically,
+)
 
 
 def test_write_atomically_creates_file(tmp_path: Path) -> None:
@@ -20,7 +23,9 @@ def test_write_atomically_creates_file(tmp_path: Path) -> None:
     assert target.read_bytes() == data
 
 
-def test_write_atomically_replaces_existing_file(tmp_path: Path) -> None:
+def test_write_atomically_replaces_existing_file(
+    tmp_path: Path,
+) -> None:
     target = tmp_path / "ramzfort.vault"
     target.write_bytes(b"old-data")
 
@@ -108,7 +113,10 @@ def test_create_atomically_removes_temporary_file_after_failure(
 ) -> None:
     target = tmp_path / "ramzfort.vault"
 
-    def fail_link(source: str | bytes, destination: str | bytes) -> None:
+    def fail_link(
+        source: str | bytes,
+        destination: str | bytes,
+    ) -> None:
         raise OSError("Simulated link failure.")
 
     monkeypatch.setattr(os, "link", fail_link)

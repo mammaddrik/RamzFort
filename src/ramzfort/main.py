@@ -25,7 +25,7 @@ from ramzfort.cli.commands.entries import (
     update,
 )
 from ramzfort.cli.commands.generate import generate
-from ramzfort.cli.commands.vault import create, open_vault
+from ramzfort.cli.commands.vault import create, open_vault, recover
 
 HELP_CONTEXT_SETTINGS = {
     "help_option_names": ["-h", "--help"],
@@ -47,7 +47,10 @@ class AliasedCommandGroup(TyperGroup):
         args: list[str],
     ) -> list[str]:
         if args and args[0] in self.command_aliases:
-            args = [self.command_aliases[args[0]], *args[1:]]
+            args = [
+                self.command_aliases[args[0]],
+                *args[1:],
+            ]
 
         return super().parse_args(ctx, args)
 
@@ -134,8 +137,14 @@ class AliasedCommandGroup(TyperGroup):
         )
 
         for command, command_name, aliases, description in rows:
-            command_text = Text(command_name, style="bold cyan")
-            alias_text = Text(aliases, style="green")
+            command_text = Text(
+                command_name,
+                style="bold cyan",
+            )
+            alias_text = Text(
+                aliases,
+                style="green",
+            )
 
             if command.deprecated:
                 command_text.stylize("strike")
@@ -223,6 +232,11 @@ vault_app.command(
     context_settings=HELP_CONTEXT_SETTINGS,
     help=VAULT_COMMAND_HELP["open"],
 )(open_vault)
+
+vault_app.command(
+    context_settings=HELP_CONTEXT_SETTINGS,
+    help=VAULT_COMMAND_HELP["recover"],
+)(recover)
 
 vault_app.command(
     context_settings=HELP_CONTEXT_SETTINGS,

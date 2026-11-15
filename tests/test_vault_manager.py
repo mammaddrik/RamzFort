@@ -9,13 +9,11 @@ from uuid import uuid4
 
 import pytest
 
-from ramzfort.security.encryption import decrypt_data
-from ramzfort.security.key_derivation import derive_key
 from ramzfort.vault.exceptions import ConcurrentModificationError
 from ramzfort.vault.file_reader import read_vault_file
+from ramzfort.vault.header import VaultHeaderV2
 from ramzfort.vault.manager import VaultManager
 from ramzfort.vault.models import VaultEntry
-from ramzfort.vault.serialization import deserialize_entries
 from ramzfort.vault.session import VaultSession
 from ramzfort.vault.session_state import SessionState
 
@@ -23,7 +21,11 @@ from ramzfort.vault.session_state import SessionState
 def test_create_generates_vault_file(tmp_path: Path) -> None:
     vault_path = tmp_path / "ramzfort.vault"
 
-    VaultManager.create(vault_path, "StrongMasterPassword123!")
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+    manager.close()
 
     assert vault_path.is_file()
 
@@ -34,26 +36,17 @@ def test_create_generates_valid_encrypted_vault(
     vault_path = tmp_path / "ramzfort.vault"
     master_password = "StrongMasterPassword123!"
 
-    VaultManager.create(vault_path, master_password)
+    manager = VaultManager.create(vault_path, master_password)
+    manager.close()
 
     header, ciphertext = read_vault_file(vault_path)
 
-    key = derive_key(
-        password=master_password,
-        salt=header.salt,
-        memory_cost=header.memory_cost,
-        time_cost=header.time_cost,
-        parallelism=header.parallelism,
-    )
+    assert isinstance(header, VaultHeaderV2)
+    assert header.data_nonce
+    assert ciphertext
 
-    plaintext = decrypt_data(
-        ciphertext=ciphertext,
-        key=key,
-        nonce=header.nonce,
-        associated_data=header.to_bytes(),
-    )
-
-    assert deserialize_entries(plaintext) == []
+    with VaultManager.open(vault_path, master_password) as manager:
+        assert manager.get_entries() == ()
 
 
 def test_create_does_not_store_plaintext(
@@ -62,7 +55,8 @@ def test_create_does_not_store_plaintext(
     vault_path = tmp_path / "ramzfort.vault"
     master_password = "StrongMasterPassword123!"
 
-    VaultManager.create(vault_path, master_password)
+    manager = VaultManager.create(vault_path, master_password)
+    manager.close()
 
     file_data = vault_path.read_bytes()
 
@@ -108,13 +102,17 @@ def test_create_rejects_invalid_master_password_type(
 def test_open_restores_empty_vault(tmp_path: Path) -> None:
     vault_path = tmp_path / "ramzfort.vault"
 
-    VaultManager.create(vault_path, "StrongMasterPassword123!")
-    manager = VaultManager.open(
+    manager = VaultManager.create(
         vault_path,
         "StrongMasterPassword123!",
     )
+    manager.close()
 
-    assert manager._entries == []
+    with VaultManager.open(
+        vault_path,
+        "StrongMasterPassword123!",
+    ) as reopened_manager:
+        assert reopened_manager.get_entries() == ()
 
 
 def test_open_rejects_wrong_master_password(
@@ -122,7 +120,11 @@ def test_open_rejects_wrong_master_password(
 ) -> None:
     vault_path = tmp_path / "ramzfort.vault"
 
-    VaultManager.create(vault_path, "StrongMasterPassword123!")
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+    manager.close()
 
     with pytest.raises(ValueError, match="Invalid master password"):
         VaultManager.open(vault_path, "WrongMasterPassword123!")
@@ -133,13 +135,20 @@ def test_open_rejects_tampered_ciphertext(
 ) -> None:
     vault_path = tmp_path / "ramzfort.vault"
 
-    VaultManager.create(vault_path, "StrongMasterPassword123!")
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+    manager.close()
 
     file_data = bytearray(vault_path.read_bytes())
     file_data[-1] ^= 1
     vault_path.write_bytes(file_data)
 
-    with pytest.raises(ValueError, match="Invalid master password"):
+    with pytest.raises(
+        ValueError,
+        match="Vault contents could not be authenticated",
+    ):
         VaultManager.open(vault_path, "StrongMasterPassword123!")
 
 
@@ -148,10 +157,19 @@ def test_open_does_not_modify_vault_file(
 ) -> None:
     vault_path = tmp_path / "ramzfort.vault"
 
-    VaultManager.create(vault_path, "StrongMasterPassword123!")
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+    manager.close()
+
     original_data = vault_path.read_bytes()
 
-    VaultManager.open(vault_path, "StrongMasterPassword123!")
+    with VaultManager.open(
+        vault_path,
+        "StrongMasterPassword123!",
+    ):
+        pass
 
     assert vault_path.read_bytes() == original_data
 
@@ -161,7 +179,11 @@ def test_open_rejects_empty_master_password(
 ) -> None:
     vault_path = tmp_path / "ramzfort.vault"
 
-    VaultManager.create(vault_path, "StrongMasterPassword123!")
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+    manager.close()
 
     with pytest.raises(ValueError, match="must not be empty"):
         VaultManager.open(vault_path, "")
@@ -172,7 +194,11 @@ def test_open_rejects_invalid_master_password_type(
 ) -> None:
     vault_path = tmp_path / "ramzfort.vault"
 
-    VaultManager.create(vault_path, "StrongMasterPassword123!")
+    manager = VaultManager.create(
+        vault_path,
+        "StrongMasterPassword123!",
+    )
+    manager.close()
 
     with pytest.raises(TypeError):
         VaultManager.open(vault_path, cast(Any, 123))
@@ -228,12 +254,11 @@ def test_save_preserves_vault_data(tmp_path: Path) -> None:
 
     manager.save()
 
-    reopened_manager = VaultManager.open(
+    with VaultManager.open(
         vault_path,
         "StrongMasterPassword123!",
-    )
-
-    assert reopened_manager.get_entries() == ()
+    ) as reopened_manager:
+        assert reopened_manager.get_entries() == ()
 
 
 def test_save_generates_unique_nonces(tmp_path: Path) -> None:
@@ -244,14 +269,20 @@ def test_save_generates_unique_nonces(tmp_path: Path) -> None:
         "StrongMasterPassword123!",
     )
 
-    nonces = {
-        read_vault_file(vault_path)[0].nonce,
-    }
+    initial_header, _ = read_vault_file(vault_path)
+
+    assert isinstance(initial_header, VaultHeaderV2)
+
+    nonces = {initial_header.data_nonce}
 
     for _ in range(20):
         manager.save()
+
         header, _ = read_vault_file(vault_path)
-        nonces.add(header.nonce)
+
+        assert isinstance(header, VaultHeaderV2)
+
+        nonces.add(header.data_nonce)
 
     assert len(nonces) == 21
 
@@ -322,9 +353,11 @@ def test_add_entry_persists_entry_after_reopening(
 
     manager.add_entry(entry)
 
-    reopened_manager = VaultManager.open(vault_path, master_password)
-
-    assert reopened_manager.get_entries() == (entry,)
+    with VaultManager.open(
+        vault_path,
+        master_password,
+    ) as reopened_manager:
+        assert reopened_manager.get_entries() == (entry,)
 
 
 def test_add_entry_rejects_duplicate_id(tmp_path: Path) -> None:
@@ -434,9 +467,11 @@ def test_remove_entry_persists_after_reopening(
     manager.add_entry(entry)
     manager.remove_entry(entry.id)
 
-    reopened_manager = VaultManager.open(vault_path, master_password)
-
-    assert reopened_manager.get_entries() == ()
+    with VaultManager.open(
+        vault_path,
+        master_password,
+    ) as reopened_manager:
+        assert reopened_manager.get_entries() == ()
 
 
 def test_remove_entry_rejects_unknown_id(
@@ -559,9 +594,11 @@ def test_update_entry_persists_after_reopening(
 
     manager.update_entry(updated_entry)
 
-    reopened_manager = VaultManager.open(vault_path, master_password)
-
-    assert reopened_manager.get_entries() == manager.get_entries()
+    with VaultManager.open(
+        vault_path,
+        master_password,
+    ) as reopened_manager:
+        assert reopened_manager.get_entries() == manager.get_entries()
 
 
 def test_update_entry_preserves_creation_timestamp(
@@ -694,12 +731,11 @@ def test_save_rejects_concurrent_modification(tmp_path: Path) -> None:
 
     assert second_manager.get_entries() == ()
 
-    reopened_manager = VaultManager.open(
+    with VaultManager.open(
         vault_path,
         "StrongMasterPassword123!",
-    )
-
-    assert reopened_manager.get_entries() == ()
+    ) as reopened_manager:
+        assert reopened_manager.get_entries() == ()
 
 
 def test_save_rejects_external_file_modification(tmp_path: Path) -> None:
@@ -711,12 +747,13 @@ def test_save_rejects_external_file_modification(tmp_path: Path) -> None:
     )
 
     original_data = vault_path.read_bytes()
-    vault_path.write_bytes(original_data + b"external modification")
+    external_data = original_data + b"external modification"
+    vault_path.write_bytes(external_data)
 
     with pytest.raises(ConcurrentModificationError):
         manager.save()
 
-    assert vault_path.read_bytes() == original_data + b"external modification"
+    assert vault_path.read_bytes() == external_data
 
 
 def test_close_clears_encryption_key(tmp_path: Path) -> None:
@@ -870,12 +907,11 @@ def test_concurrent_managers_only_allow_first_save(
     with pytest.raises(ConcurrentModificationError):
         second_manager.add_entry(second_entry)
 
-    reopened_manager = VaultManager.open(
+    with VaultManager.open(
         vault_path,
         master_password,
-    )
-
-    assert reopened_manager.get_entries() == (first_entry,)
+    ) as reopened_manager:
+        assert reopened_manager.get_entries() == (first_entry,)
 
 
 def test_failed_concurrent_save_preserves_manager_digest(
@@ -936,16 +972,16 @@ def _write_from_process(
     vault_path: str,
     master_password: str,
     title: str,
-    ready: Event,
+    ready: Any,
     start: Event,
     results: Any,
 ) -> None:
     manager = VaultManager.open(vault_path, master_password)
 
     try:
-        ready.set()
+        ready.put("ready")
 
-        if not start.wait(10):
+        if not start.wait(15):
             results.put("timeout")
             return
 
@@ -957,10 +993,15 @@ def _write_from_process(
 
         manager.add_entry(entry)
         results.put("success")
+
     except ConcurrentModificationError:
         results.put("conflict")
+
     except Exception as error:
-        results.put(f"error: {type(error).__name__}: {error}")
+        results.put(
+            f"error: {type(error).__name__}: {error}"
+        )
+
     finally:
         manager.close()
 
@@ -975,7 +1016,8 @@ def test_multiprocess_managers_prevent_lost_updates(
     manager.close()
 
     context = multiprocessing.get_context("spawn")
-    ready = context.Event()
+
+    ready = context.Queue()
     start = context.Event()
     results = context.Queue()
 
@@ -1001,7 +1043,15 @@ def test_multiprocess_managers_prevent_lost_updates(
             process.start()
             started_processes.append(process)
 
-        assert ready.wait(15)
+        for _ in processes:
+            try:
+                message = ready.get(timeout=30)
+            except Empty:
+                pytest.fail(
+                    "A worker process did not become ready."
+                )
+
+            assert message == "ready"
 
         start.set()
 
@@ -1009,35 +1059,50 @@ def test_multiprocess_managers_prevent_lost_updates(
 
         for _ in processes:
             try:
-                process_results.append(results.get(timeout=20))
+                process_results.append(
+                    results.get(timeout=30)
+                )
             except Empty:
-                pytest.fail("A worker process did not return a result.")
+                pytest.fail(
+                    "A worker process did not return a result."
+                )
 
         for process in processes:
             process.join(20)
 
-        assert all(not process.is_alive() for process in processes)
-        assert all(process.exitcode == 0 for process in processes)
+        assert all(
+            not process.is_alive()
+            for process in processes
+        )
+
+        assert all(
+            process.exitcode == 0
+            for process in processes
+        )
 
         assert process_results.count("success") == 1
         assert process_results.count("conflict") == 1
 
-        reopened_manager = VaultManager.open(
+        with VaultManager.open(
             vault_path,
             master_password,
-        )
-
-        entries = reopened_manager.get_entries()
+        ) as reopened_manager:
+            entries = reopened_manager.get_entries()
 
         assert len(entries) == 1
         assert entries[0].title in {"First", "Second"}
+
     finally:
         start.set()
 
         for process in started_processes:
             if process.is_alive():
                 process.terminate()
+
             process.join(5)
 
+        ready.close()
         results.close()
+
+        ready.join_thread()
         results.join_thread()

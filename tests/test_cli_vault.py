@@ -41,19 +41,22 @@ def test_create_vault_password_mismatch(tmp_path: Path) -> None:
     assert not vault_path.exists()
 
 
-def test_create_vault_does_not_overwrite_existing_file(tmp_path: Path) -> None:
+def test_create_vault_does_not_overwrite_existing_file(
+    tmp_path: Path,
+) -> None:
     vault_path = tmp_path / "test.vault"
     original_data = b"existing data"
     vault_path.write_bytes(original_data)
 
     with patch(
-        "ramzfort.cli.commands.vault.typer.prompt",
-        side_effect=["StrongMasterPassword123!", "StrongMasterPassword123!"],
-    ):
+        "ramzfort.cli.commands.vault.typer.prompt"
+    ) as prompt_mock:
         result = runner.invoke(app, ["vault", "create", str(vault_path)])
 
     assert result.exit_code != 0
+    assert "A file already exists" in result.output
     assert vault_path.read_bytes() == original_data
+    prompt_mock.assert_not_called()
 
 
 def test_open_vault_success(tmp_path: Path) -> None:

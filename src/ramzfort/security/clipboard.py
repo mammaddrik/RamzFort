@@ -14,11 +14,20 @@ class ClipboardManager:
         copy: Callable[[str], None] = pyperclip.copy,
         paste: Callable[[], str] = pyperclip.paste,
     ) -> None:
-        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        if isinstance(timeout, bool) or not isinstance(
+            timeout,
+            (int, float),
+        ):
             raise TypeError("Clipboard timeout must be a number.")
 
         if timeout <= 0:
             raise ValueError("Clipboard timeout must be greater than zero.")
+
+        if not callable(copy):
+            raise TypeError("Clipboard copy must be callable.")
+
+        if not callable(paste):
+            raise TypeError("Clipboard paste must be callable.")
 
         self._timeout = float(timeout)
         self._copy = copy
@@ -54,7 +63,21 @@ class ClipboardManager:
             )
             timer.daemon = False
             self._timer = timer
-            timer.start()
+
+            try:
+                timer.start()
+            except BaseException:
+                self._timer = None
+                self._copied_value = None
+                self._generation += 1
+
+                try:
+                    if self._paste() == value:
+                        self._copy("")
+                except Exception:
+                    pass
+
+                raise
 
     def clear(self) -> bool:
         with self._lock:

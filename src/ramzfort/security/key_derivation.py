@@ -1,7 +1,11 @@
 
 from argon2.low_level import Type, hash_secret_raw
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 KEY_SIZE = 32
+SALT_SIZE = 16
+RECOVERY_SALT_SIZE = 16
 
 
 def derive_key(
@@ -20,7 +24,7 @@ def derive_key(
     if not isinstance(salt, bytes):
         raise TypeError("Salt must be bytes.")
 
-    if len(salt) != 16:
+    if len(salt) != SALT_SIZE:
         raise ValueError("Salt must be exactly 16 bytes.")
 
     parameters = (memory_cost, time_cost, parallelism)
@@ -49,3 +53,34 @@ def derive_key(
         hash_len=KEY_SIZE,
         type=Type.ID,
     )
+
+
+def derive_recovery_key(
+    recovery_key: bytes,
+    salt: bytes,
+    info: bytes,
+) -> bytes:
+    if not isinstance(recovery_key, bytes):
+        raise TypeError("Recovery key must be bytes.")
+
+    if len(recovery_key) != KEY_SIZE:
+        raise ValueError("Recovery key must be exactly 32 bytes.")
+
+    if not isinstance(salt, bytes):
+        raise TypeError("Recovery salt must be bytes.")
+
+    if len(salt) != RECOVERY_SALT_SIZE:
+        raise ValueError("Recovery salt must be exactly 16 bytes.")
+
+    if not isinstance(info, bytes):
+        raise TypeError("HKDF info must be bytes.")
+
+    if not info:
+        raise ValueError("HKDF info must not be empty.")
+
+    return HKDF(
+        algorithm=hashes.SHA256(),
+        length=KEY_SIZE,
+        salt=salt,
+        info=info,
+    ).derive(recovery_key)

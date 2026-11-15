@@ -1,4 +1,3 @@
-
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -18,7 +17,6 @@ class VaultEntry:
     def __post_init__(self) -> None:
         required_fields = {
             "title": self.title,
-            "username": self.username,
             "password": self.password,
         }
 
@@ -28,6 +26,12 @@ class VaultEntry:
 
             if not value.strip():
                 raise ValueError(f"{name} must not be empty.")
+
+        if not isinstance(self.username, str):
+            raise TypeError("username must be a string.")
+
+        if not self.username.strip():
+            raise ValueError("username must not be empty.")
 
         optional_fields = {
             "url": self.url,

@@ -27,6 +27,8 @@ from ramzfort.cli.commands.entries import (
 from ramzfort.vault.authenticator import VaultAuthenticator
 from ramzfort.vault.exceptions import (
     InvalidMasterPasswordError,
+    InvalidRecoveryKeyError,
+    RecoveryError,
     VaultCorruptedError,
 )
 from ramzfort.vault.manager import VaultManager
@@ -73,11 +75,14 @@ def create(path: Path) -> None:
     if master_password != confirmation:
         raise typer.BadParameter("Master passwords do not match.")
 
+    manager = None
+
     try:
         manager = VaultManager.create(
             path=path,
             master_password=master_password,
         )
+        recovery_key = manager.take_recovery_key()
     except FileExistsError as error:
         raise typer.BadParameter(
             "A file already exists at the specified path."
@@ -88,10 +93,101 @@ def create(path: Path) -> None:
         raise typer.BadParameter(
             f"Unable to create vault: {error}"
         ) from error
-
-    manager.close()
+    finally:
+        if manager is not None:
+            manager.close()
 
     console.print("[green]Vault created successfully.[/green]")
+    console.print()
+    console.print(
+        Panel(
+            f"[bold yellow]{recovery_key}[/bold yellow]\n\n"
+            "Store this Recovery Key somewhere safe and separate "
+            "from your Vault.\n"
+            "It is shown only once. It can restore access if you "
+            "forget your Master Password and reset a permanent "
+            "authentication lock.",
+            title="Your Recovery Key",
+            border_style="yellow",
+        )
+    )
+
+
+def recover(path: Path) -> None:
+    """Recover a vault using its Recovery Key."""
+
+    recovery_key = typer.prompt(
+        "Enter Recovery Key",
+        hide_input=True,
+    )
+
+    new_master_password = typer.prompt(
+        "Enter new master password",
+        hide_input=True,
+        confirmation_prompt=False,
+    )
+
+    confirmation = typer.prompt(
+        "Confirm new master password",
+        hide_input=True,
+        confirmation_prompt=False,
+    )
+
+    if new_master_password != confirmation:
+        raise typer.BadParameter("Master passwords do not match.")
+
+    authenticator = VaultAuthenticator()
+
+    try:
+        session = authenticator.recover_vault(
+            path=path,
+            recovery_key=recovery_key,
+            new_master_password=new_master_password,
+        )
+    except InvalidRecoveryKeyError as error:
+        raise typer.BadParameter(
+            "Invalid Recovery Key."
+        ) from error
+    except InvalidMasterPasswordError as error:
+        raise typer.BadParameter(
+            "Unable to set the new master password."
+        ) from error
+    except VaultCorruptedError as error:
+        raise typer.BadParameter(
+            "Vault file is corrupted or invalid."
+        ) from error
+    except RecoveryError as error:
+        raise typer.BadParameter(str(error)) from error
+    except FileNotFoundError as error:
+        raise typer.BadParameter(
+            "Vault file does not exist."
+        ) from error
+    except OSError as error:
+        raise typer.BadParameter(
+            f"Unable to recover vault: {error}"
+        ) from error
+    except RuntimeError as error:
+        raise typer.BadParameter(str(error)) from error
+
+    try:
+        with session:
+            console.print(
+                Panel(
+                    f"Vault: {path}\n"
+                    "Master password: Updated\n"
+                    "Recovery Key: Verified\n"
+                    "Authentication lock: Reset\n"
+                    "Status: Active",
+                    title="Vault Recovered",
+                    border_style="green",
+                )
+            )
+    finally:
+        session.close()
+
+    console.print(
+        "[green]Vault recovery completed successfully.[/green]"
+    )
 
 
 def _show_help() -> None:
@@ -253,6 +349,7 @@ def _execute_vault_operation(
 def _execute_command(
     command_line: str,
     session: VaultSession,
+    authenticator: VaultAuthenticator,
 ) -> None:
     try:
         parts = shlex.split(command_line)
@@ -313,7 +410,17 @@ def _execute_command(
             try:
                 session.unlock(master_password)
             except InvalidMasterPasswordError:
-                console.print("[red]Invalid master password.[/red]")
+                remaining = authenticator.guard.remaining_attempts
+
+                if remaining == 0:
+                    console.print(
+                        "[red]Maximum authentication attempts reached.[/red]"
+                    )
+                else:
+                    console.print("[red]Invalid master password.[/red]")
+                    console.print(
+                        f"[yellow]Attempts remaining: {remaining}[/yellow]"
+                    )
             except RuntimeError as error:
                 console.print(f"[red]{error}[/red]")
             else:
@@ -351,8 +458,15 @@ def open_vault(path: Path) -> None:
             master_password=master_password,
         )
     except InvalidMasterPasswordError as error:
+        remaining = authenticator.guard.remaining_attempts
+
+        if remaining == 0:
+            raise typer.BadParameter(
+                "Maximum authentication attempts reached."
+            ) from error
+
         raise typer.BadParameter(
-            "Invalid master password."
+            f"Invalid master password. Attempts remaining: {remaining}"
         ) from error
     except VaultCorruptedError as error:
         raise typer.BadParameter(
@@ -437,7 +551,11 @@ def open_vault(path: Path) -> None:
                     )
                     continue
 
-                _execute_command(command_line, session)
+                _execute_command(
+                    command_line,
+                    session,
+                    authenticator,
+                )
 
     finally:
         session.close()

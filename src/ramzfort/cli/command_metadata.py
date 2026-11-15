@@ -12,6 +12,11 @@ VAULT_COMMANDS: tuple[tuple[str, str, str], ...] = (
         "its stored credentials.",
     ),
     (
+        "recover",
+        "-r",
+        "Recover a vault using its Recovery Key and set a new master password.",
+    ),
+    (
         "add",
         "-n",
         "Add a new account entry with a username, password, URL, and optional notes.",

@@ -65,7 +65,7 @@ ramzfort --help
 ```
 
 ### <img src="https://raw.githubusercontent.com/danielcranney/readme-generator/main/public/icons/skills/linux-colored.svg" width="15" height="15" alt="Linux"/> Linux
-> **Note:** Melodpy isn't compatible with python2, run it with python3 instead.<br>
+> **Note:** RamzFort isn't compatible with python2, run it with python3 instead.<br>
 ```bash
 git clone https://github.com/mammaddrik/RamzFort.git
 cd RamzFort
@@ -77,6 +77,24 @@ python -m pip install --upgrade pip
 python -m pip install -e .
 
 ramzfort --help
+```
+
+### Requirements
+
+| **Requirements** | **Command** | **Link** | **Version** |
+| ------------- | ------------- | ------------- | ------------- |
+| typer | `python -m pip install typer` | [pypi](https://pypi.org/project/typer/) | >=0.27.3 |
+| rich | `python -m pip install rich` | [pypi](https://pypi.org/project/rich/) | >=15.0.0 |
+| zxcvbn | `python -m pip install zxcvbn` | [pypi](https://pypi.org/project/zxcvbn/) | 4.5.0 |
+| cryptography | `python -m pip install cryptography` | [pypi](https://pypi.org/project/cryptography/) | >=50.0.2 |
+| argon2-cffi | `python -m pip install argon2-cffi` | [pypi](https://pypi.org/project/argon2-cffi/) | >=25.1.0 |
+| portalocker | `python -m pip install portalocker` | [pypi](https://pypi.org/project/portalocker/) | >=4.4.2 |
+| pyperclip | `python -m pip install pyperclip` | [pypi](https://pypi.org/project/pyperclip/) | >=1.9.0 |
+
+> **Note:** RamzFort automatically installs its required dependencies during installation. To install the development dependencies, use the following command.
+
+```
+python -m pip install -e ".[dev]"
 ```
 
 ## License

@@ -44,3 +44,42 @@ RamzFort is a secure, lightweight, and user-friendly command-line password manag
 - ⚡ Fast command execution
 - 🏷️ Global version information
 - 🖥️ Cross-platform command-line support
+
+## Installation
+
+### <img src="https://i.postimg.cc/nLp4jWx0/Windows.png" width="15" height="15" alt="Windows"/> Windows
+
+> **Note:** RamzFort isn't compatible with python2, run it with python3 instead.<br>
+
+```bash
+git clone https://github.com/mammaddrik/RamzFort.git
+cd RamzFort
+
+python -m venv .venv
+.venv\Scripts\activate
+
+python -m pip install --upgrade pip
+python -m pip install -e .
+
+ramzfort --help
+```
+
+### <img src="https://raw.githubusercontent.com/danielcranney/readme-generator/main/public/icons/skills/linux-colored.svg" width="15" height="15" alt="Linux"/> Linux
+> **Note:** Melodpy isn't compatible with python2, run it with python3 instead.<br>
+```bash
+git clone https://github.com/mammaddrik/RamzFort.git
+cd RamzFort
+
+python3 -m venv .venv
+source .venv/bin/activate
+
+python -m pip install --upgrade pip
+python -m pip install -e .
+
+ramzfort --help
+```
+
+## License
+RamzFort is licensed under [MIT License](https://github.com/mammaddrik/RamzFort/blob/main/LICENSE).
+
+<p align="right"><a href="#top">back to top</a></p>
